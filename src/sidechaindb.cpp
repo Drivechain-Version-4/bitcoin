@@ -245,7 +245,7 @@ bool SidechainDB::HaveWTJoinCached(uint256 wtxid) const
     return false;
 }
 
-bool SidechainDB::HaveDepositCached(SidechainDeposit deposit) const
+bool SidechainDB::HaveDepositCached(const SidechainDeposit &deposit) const
 {
     for (const SidechainDeposit& d : vDepositCache) {
         if (d == deposit)
@@ -473,6 +473,11 @@ std::string Sidechain::GetSidechainName() const
         break;
     }
     return "SIDECHAIN_UNKNOWN";
+}
+
+uint16_t Sidechain::GetTau() const
+{
+    return (nWaitPeriod + nVerificationPeriod);
 }
 
 std::string SidechainDB::ToString() const

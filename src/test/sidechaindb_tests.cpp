@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
 
     int score0, score1;
     score0 = score1 = 0;
-    for (int i = 0; i <= 200; i++) {
+    for (int i = 0; i <= 300; i++) {
         scdb.Update(SIDECHAIN_TEST, blocksLeft0, score0, vTestDeposit[0].GetHash());
         scdb.Update(SIDECHAIN_HIVEMIND, blocksLeft1, score1, vHivemindDeposit[0].GetHash());
         scdb.Update(SIDECHAIN_WIMBLE, blocksLeft2, 0, vWimbleDeposit[0].GetHash());
@@ -215,6 +215,9 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
 {
     // Verify that state scripts created based on known SidechainDB
     // state examples are formatted as expected
+    const Sidechain& sidechainTest = ValidSidechains[SIDECHAIN_TEST];
+    const Sidechain& sidechainHivemind = ValidSidechains[SIDECHAIN_HIVEMIND];
+    const Sidechain& sidechainWimble = ValidSidechains[SIDECHAIN_WIMBLE];
 
     std::vector<CMutableTransaction> vTestDeposit = CreateDepositTransactions(SIDECHAIN_TEST, 3);
     std::vector<CMutableTransaction> vHivemindDeposit = CreateDepositTransactions(SIDECHAIN_HIVEMIND, 3);
@@ -226,8 +229,8 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
     // Test empty SCDB
     CScript scriptEmptyExpected = CScript();
     SidechainDB scdbEmpty;
+    BOOST_CHECK(scriptEmptyExpected == scdbEmpty.CreateStateScript(sidechainTest.GetTau() - 1));
 
-    BOOST_CHECK(scriptEmptyExpected == scdbEmpty.CreateStateScript(chainActive.Height()));
 
     // Test populated (but not full) SCDB test
     CScript scriptPopulatedExpected;
@@ -236,14 +239,27 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
                     << SCOP_VERIFY << SCOP_SC_DELIM
                     << SCOP_VERIFY;
     SidechainDB scdbPopulated;
-    scdbPopulated.Update(SIDECHAIN_TEST, 400, 0, vTestDeposit[0].GetHash());
-    scdbPopulated.Update(SIDECHAIN_TEST, 399, 1, vTestDeposit[0].GetHash());
-    scdbPopulated.Update(SIDECHAIN_HIVEMIND, 400, 0, vHivemindDeposit[0].GetHash());
-    scdbPopulated.Update(SIDECHAIN_WIMBLE, 400, 0, vWimbleDeposit[0].GetHash());
-    scdbPopulated.Update(SIDECHAIN_WIMBLE, 399, 1, vWimbleDeposit[0].GetHash());
-    scdbPopulated.Update(SIDECHAIN_WIMBLE, 398, 2, vWimbleDeposit[0].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainTest.nWaitPeriod; i++) {
+        scdbPopulated.Update(SIDECHAIN_TEST, sidechainTest.GetTau() - i, 0, vTestDeposit[0].GetHash());
+    }
+    uint16_t nVoteHeight = sidechainTest.GetTau() - sidechainTest.nWaitPeriod;
+    scdbPopulated.Update(SIDECHAIN_TEST, nVoteHeight, 1, vTestDeposit[0].GetHash());
 
-    BOOST_CHECK(scriptPopulatedExpected == scdbPopulated.CreateStateScript(chainActive.Height()));
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainHivemind.nWaitPeriod; i++) {
+        scdbPopulated.Update(SIDECHAIN_HIVEMIND, sidechainHivemind.GetTau() - i, 0, vHivemindDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainHivemind.GetTau() - sidechainHivemind.nWaitPeriod;
+    scdbPopulated.Update(SIDECHAIN_HIVEMIND, nVoteHeight, 1, vHivemindDeposit[0].GetHash());
+
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainWimble.nWaitPeriod; i++) {
+        scdbPopulated.Update(SIDECHAIN_WIMBLE, sidechainWimble.GetTau() - i, 0, vWimbleDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainWimble.GetTau() - sidechainWimble.nWaitPeriod;
+    scdbPopulated.Update(SIDECHAIN_WIMBLE, nVoteHeight, 1, vWimbleDeposit[0].GetHash());
+    BOOST_CHECK(scriptPopulatedExpected == scdbPopulated.CreateStateScript(sidechainTest.GetTau() - 1));
 
     // Test Full SCDB
     CScript scriptFullExpected;
@@ -255,24 +271,33 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
                << SCOP_VERIFY << SCOP_WT_DELIM << SCOP_REJECT << SCOP_WT_DELIM << SCOP_REJECT;
 
     SidechainDB scdbFull;
-    // Fill up the state space available to SIDECHAIN_TEST
-    scdbFull.Update(SIDECHAIN_TEST, 400, 0, vTestDeposit[0].GetHash());
-    scdbFull.Update(SIDECHAIN_TEST, 399, 0, vTestDeposit[1].GetHash());
-    scdbFull.Update(SIDECHAIN_TEST, 398, 0, vTestDeposit[2].GetHash());
-    // Fill up the state space available to SIDECHAIN_HIVEMIND
-    scdbFull.Update(SIDECHAIN_HIVEMIND, 400, 0, vHivemindDeposit[0].GetHash());
-    scdbFull.Update(SIDECHAIN_HIVEMIND, 399, 0, vHivemindDeposit[1].GetHash());
-    scdbFull.Update(SIDECHAIN_HIVEMIND, 398, 0, vHivemindDeposit[2].GetHash());
-    // Fill up the state space available to SIDECHAIN_WIMBLE
-    scdbFull.Update(SIDECHAIN_WIMBLE, 400, 0, vWimbleDeposit[0].GetHash());
-    scdbFull.Update(SIDECHAIN_WIMBLE, 399, 0, vWimbleDeposit[1].GetHash());
-    scdbFull.Update(SIDECHAIN_WIMBLE, 398, 0, vWimbleDeposit[2].GetHash());
-    // Upvote the WT^ in state positon 0 for each sidechain
-    scdbFull.Update(SIDECHAIN_TEST, 397, 1, vTestDeposit[0].GetHash());
-    scdbFull.Update(SIDECHAIN_HIVEMIND, 397, 1, vHivemindDeposit[0].GetHash());
-    scdbFull.Update(SIDECHAIN_WIMBLE, 397, 1, vWimbleDeposit[0].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainTest.nWaitPeriod; i++) {
+        scdbFull.Update(SIDECHAIN_TEST, sidechainTest.GetTau() - i, 0, vTestDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainTest.GetTau() - sidechainTest.nWaitPeriod;
+    scdbFull.Update(SIDECHAIN_TEST, nVoteHeight, 1, vTestDeposit[0].GetHash());
+    scdbFull.Update(SIDECHAIN_TEST, nVoteHeight - 1, 0, vTestDeposit[1].GetHash());
+    scdbFull.Update(SIDECHAIN_TEST, nVoteHeight - 2, 0, vTestDeposit[2].GetHash());
 
-    BOOST_CHECK(scriptFullExpected == scdbFull.CreateStateScript(chainActive.Height()));
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainHivemind.nWaitPeriod; i++) {
+        scdbFull.Update(SIDECHAIN_HIVEMIND, sidechainHivemind.GetTau() - i, 0, vHivemindDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainHivemind.GetTau() - sidechainHivemind.nWaitPeriod;
+    scdbFull.Update(SIDECHAIN_HIVEMIND, nVoteHeight, 1, vHivemindDeposit[0].GetHash());
+    scdbFull.Update(SIDECHAIN_HIVEMIND, nVoteHeight - 1, 0, vHivemindDeposit[1].GetHash());
+    scdbFull.Update(SIDECHAIN_HIVEMIND, nVoteHeight - 2, 0, vHivemindDeposit[2].GetHash());
+
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainWimble.nWaitPeriod; i++) {
+        scdbFull.Update(SIDECHAIN_WIMBLE, sidechainWimble.GetTau() - i, 0, vWimbleDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainWimble.GetTau() - sidechainWimble.nWaitPeriod;
+    scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight, 1, vWimbleDeposit[0].GetHash());
+    scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight - 1, 0, vWimbleDeposit[1].GetHash());
+    scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight - 2, 0, vWimbleDeposit[2].GetHash());
+    BOOST_CHECK(scriptFullExpected == scdbFull.CreateStateScript(sidechainTest.GetTau() - 1));
 
     // Test with different number of WT^s per sidechain
     CScript scriptWTCountExpected;
@@ -283,19 +308,31 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
                           << SCOP_SC_DELIM
                           << SCOP_REJECT << SCOP_WT_DELIM << SCOP_VERIFY << SCOP_WT_DELIM << SCOP_REJECT;
     SidechainDB scdbCount;
-    scdbCount.Update(SIDECHAIN_TEST, 400, 0, vTestDeposit[0].GetHash());
-    scdbCount.Update(SIDECHAIN_TEST, 399, 1, vTestDeposit[0].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainTest.nWaitPeriod; i++) {
+        scdbCount.Update(SIDECHAIN_TEST, sidechainTest.GetTau() - i, 0, vTestDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainTest.GetTau() - sidechainTest.nWaitPeriod;
+    scdbCount.Update(SIDECHAIN_TEST, nVoteHeight, 1, vTestDeposit[0].GetHash());
 
-    scdbCount.Update(SIDECHAIN_HIVEMIND, 400, 0, vHivemindDeposit[0].GetHash());
-    scdbCount.Update(SIDECHAIN_HIVEMIND, 399, 0, vHivemindDeposit[1].GetHash());
-    scdbCount.Update(SIDECHAIN_HIVEMIND, 398, 1, vHivemindDeposit[1].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainHivemind.nWaitPeriod; i++) {
+        scdbCount.Update(SIDECHAIN_HIVEMIND, sidechainHivemind.GetTau() - i, 0, vHivemindDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainHivemind.GetTau() - sidechainHivemind.nWaitPeriod;
+    scdbCount.Update(SIDECHAIN_HIVEMIND, nVoteHeight, 0, vHivemindDeposit[0].GetHash());
+    scdbCount.Update(SIDECHAIN_HIVEMIND, nVoteHeight - 1, 1, vHivemindDeposit[1].GetHash());
 
-    scdbCount.Update(SIDECHAIN_WIMBLE, 400, 0, vWimbleDeposit[0].GetHash());
-    scdbCount.Update(SIDECHAIN_WIMBLE, 399, 0, vWimbleDeposit[1].GetHash());
-    scdbCount.Update(SIDECHAIN_WIMBLE, 398, 0, vWimbleDeposit[2].GetHash());
-    scdbCount.Update(SIDECHAIN_WIMBLE, 397, 1, vWimbleDeposit[1].GetHash());
 
-    BOOST_CHECK(scriptWTCountExpected == scdbCount.CreateStateScript(chainActive.Height()));
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainWimble.nWaitPeriod; i++) {
+        scdbCount.Update(SIDECHAIN_WIMBLE, sidechainWimble.GetTau() - i, 0, vWimbleDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainWimble.GetTau() - sidechainWimble.nWaitPeriod;
+    scdbCount.Update(SIDECHAIN_WIMBLE, nVoteHeight, 0, vWimbleDeposit[0].GetHash());
+    scdbCount.Update(SIDECHAIN_WIMBLE, nVoteHeight, 1, vWimbleDeposit[1].GetHash());
+    scdbCount.Update(SIDECHAIN_WIMBLE, nVoteHeight, 0, vWimbleDeposit[2].GetHash());
+    BOOST_CHECK(scriptWTCountExpected == scdbCount.CreateStateScript(sidechainTest.GetTau() - 1));
 
     // Test with some sidechains missing WT^ for this period
     CScript scriptMissingWTExpected;
@@ -303,8 +340,8 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
                             << SCOP_VERIFY
                             << SCOP_SC_DELIM << SCOP_SC_DELIM
                             << SCOP_REJECT;
-    SidechainDB scdbMissing;
-    // TODO
+    SidechainDB scdbMissing; // TODO
+
 
     // Test WT^ in different position for each sidechain
     CScript scriptWTPositionExpected;
@@ -315,22 +352,33 @@ BOOST_AUTO_TEST_CASE(sidechaindb_CreateStateScript)
                              << SCOP_SC_DELIM
                              << SCOP_REJECT << SCOP_WT_DELIM << SCOP_REJECT << SCOP_WT_DELIM << SCOP_VERIFY;
     SidechainDB scdbPosition;
-    scdbPosition.Update(SIDECHAIN_TEST, 400, 0, vTestDeposit[0].GetHash());
-    scdbPosition.Update(SIDECHAIN_TEST, 399, 0, vTestDeposit[1].GetHash());
-    scdbPosition.Update(SIDECHAIN_TEST, 398, 0, vTestDeposit[2].GetHash());
-    scdbPosition.Update(SIDECHAIN_TEST, 397, 1, vTestDeposit[0].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainTest.nWaitPeriod; i++) {
+        scdbPosition.Update(SIDECHAIN_TEST, sidechainTest.GetTau() - i, 0, vTestDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainTest.GetTau() - sidechainTest.nWaitPeriod;
+    scdbPosition.Update(SIDECHAIN_TEST, nVoteHeight, 1, vTestDeposit[0].GetHash());
+    scdbPosition.Update(SIDECHAIN_TEST, nVoteHeight - 1, 0, vTestDeposit[1].GetHash());
+    scdbPosition.Update(SIDECHAIN_TEST, nVoteHeight - 2, 0, vTestDeposit[2].GetHash());
 
-    scdbPosition.Update(SIDECHAIN_HIVEMIND, 400, 0, vHivemindDeposit[0].GetHash());
-    scdbPosition.Update(SIDECHAIN_HIVEMIND, 399, 0, vHivemindDeposit[1].GetHash());
-    scdbPosition.Update(SIDECHAIN_HIVEMIND, 398, 0, vHivemindDeposit[2].GetHash());
-    scdbPosition.Update(SIDECHAIN_HIVEMIND, 397, 1, vHivemindDeposit[1].GetHash());
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainHivemind.nWaitPeriod; i++) {
+        scdbPosition.Update(SIDECHAIN_HIVEMIND, sidechainHivemind.GetTau() - i, 0, vHivemindDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainHivemind.GetTau() - sidechainHivemind.nWaitPeriod;
+    scdbPosition.Update(SIDECHAIN_HIVEMIND, nVoteHeight, 0, vHivemindDeposit[0].GetHash());
+    scdbPosition.Update(SIDECHAIN_HIVEMIND, nVoteHeight - 1, 1, vHivemindDeposit[1].GetHash());
+    scdbPosition.Update(SIDECHAIN_HIVEMIND, nVoteHeight - 2, 0, vHivemindDeposit[2].GetHash());
 
-    scdbPosition.Update(SIDECHAIN_WIMBLE, 400, 0, vWimbleDeposit[0].GetHash());
-    scdbPosition.Update(SIDECHAIN_WIMBLE, 399, 0, vWimbleDeposit[1].GetHash());
-    scdbPosition.Update(SIDECHAIN_WIMBLE, 398, 0, vWimbleDeposit[2].GetHash());
-    scdbPosition.Update(SIDECHAIN_WIMBLE, 397, 1, vWimbleDeposit[2].GetHash());
-
-    BOOST_CHECK(scriptWTPositionExpected == scdbPosition.CreateStateScript(chainActive.Height()));
+    // Pass waiting period and then submit verification
+    for (uint16_t i = 0; i < sidechainWimble.nWaitPeriod; i++) {
+        scdbPosition.Update(SIDECHAIN_WIMBLE, sidechainWimble.GetTau() - i, 0, vWimbleDeposit[0].GetHash());
+    }
+    nVoteHeight = sidechainWimble.GetTau() - sidechainWimble.nWaitPeriod;
+    scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight, 0, vWimbleDeposit[0].GetHash());
+    scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight - 1, 0, vWimbleDeposit[1].GetHash());
+    scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight - 2, 1, vWimbleDeposit[2].GetHash());
+    BOOST_CHECK(scriptWTPositionExpected == scdbPosition.CreateStateScript(sidechainTest.GetTau() - 1));
 }
 
 //BOOST_AUTO_TEST_CASE(sidechaindb_Update)

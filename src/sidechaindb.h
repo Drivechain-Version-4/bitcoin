@@ -22,6 +22,7 @@ struct Sidechain {
 
     std::string ToString() const;
     std::string GetSidechainName() const;
+    uint16_t GetTau() const;
 };
 
 struct SidechainDeposit {
@@ -92,7 +93,7 @@ class SidechainDB
         bool HaveWTJoinCached(uint256 wtxid) const;
 
         /** Return true if the deposit is cached */
-        bool HaveDepositCached(SidechainDeposit deposit) const;
+        bool HaveDepositCached(const SidechainDeposit& deposit) const;
 
         /** Get all of the deposits this tau for nSidechain. */
         std::vector<SidechainDeposit> GetDeposits(uint8_t nSidechain) const;
