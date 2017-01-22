@@ -194,14 +194,14 @@ enum scopcodetype {
     SCOP_VERSION = 0x00,
 
     // Vote types
-    SCOP_REJECT = 0xb0,
-    SCOP_VERIFY = 0xb1,
-    SCOP_IGNORE = 0xb2,
+    SCOP_REJECT = 0x51,
+    SCOP_VERIFY = 0x52,
+    SCOP_IGNORE = 0x53,
 
     // Delimeters
-    SCOP_VERSION_DELIM = 0xb3,
-    SCOP_WT_DELIM = 0xb4,
-    SCOP_SC_DELIM = 0xb5,
+    SCOP_VERSION_DELIM = 0x54,
+    SCOP_WT_DELIM = 0x55,
+    SCOP_SC_DELIM = 0x56,
 };
 
 const char* GetOpName(opcodetype opcode);
