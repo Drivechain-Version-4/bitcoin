@@ -65,6 +65,9 @@ private Q_SLOTS:
     void updateAlerts(const QString &warnings);
     void updateWatchOnlyLabels(bool showWatchOnly);
     void handleOutOfSyncWarningClicks();
+    void on_pushButtonTestWatch_clicked();
+    void on_pushButtonTestDeposit_clicked();
+    void on_pushButtonTestWithdraw_clicked();
 };
 
 #endif // BITCOIN_QT_OVERVIEWPAGE_H

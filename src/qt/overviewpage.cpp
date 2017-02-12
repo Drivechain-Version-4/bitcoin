@@ -15,11 +15,22 @@
 #include "transactiontablemodel.h"
 #include "walletmodel.h"
 
+#include "core_io.h"
+#include "net.h"
+#include "sidechaindb.h"
+#include "consensus/validation.h"
+#include "wallet/wallet.h"
+
 #include <QAbstractItemDelegate>
 #include <QPainter>
 
 #define DECORATION_SIZE 54
 #define NUM_ITEMS 5
+
+//! KeyID for testing
+// mx3PT9t2kzCFgAURR9HeK6B5wN8egReUxY
+// cN5CqwXiaNWhNhx3oBQtA8iLjThSKxyZjfmieTsyMpG6NnHBzR7J
+static const std::string testkey = "b5437dc6a4e5da5597548cf87db009237d286636";
 
 class TxViewDelegate : public QAbstractItemDelegate
 {
@@ -270,4 +281,67 @@ void OverviewPage::showOutOfSyncWarning(bool fShow)
 {
     ui->labelWalletStatus->setVisible(fShow);
     ui->labelTransactionsStatus->setVisible(fShow);
+}
+
+void OverviewPage::on_pushButtonTestWatch_clicked()
+{
+    pwalletMain->MarkDirty();
+    std::cout << "Testing watch\n";
+
+    // Watch every sidechain lockbox
+    for (const Sidechain& s : ValidSidechains) {
+        // Deposit lock script
+        CScript script = CScript() << s.nSidechain << ToByteVector(testkey) << OP_NOP4;
+
+        if (pwalletMain->HaveCScript(script)) {
+            std::cout << "address book already contains script\n";
+            return;
+        }
+
+        // Address for lock script
+        CBitcoinAddress addr = CBitcoinAddress(CScriptID(script));
+
+        // Watch the script
+        if (pwalletMain->AddWatchOnly(script)) {
+            std::cout << "Added watch only : " << ScriptToAsmStr(script) << std::endl;
+        }
+
+        // Add the script address to the address book
+        bool added = pwalletMain->SetAddressBook(addr.Get(), s.GetSidechainName(), "send");
+        if (added) {
+            std::cout << "Added watch only script to address book... done\n";
+        }
+    }
+}
+
+void OverviewPage::on_pushButtonTestDeposit_clicked()
+{
+    static const Sidechain& s = ValidSidechains[0];
+    CScript script = CScript() << s.nSidechain << ToByteVector(testkey) << OP_NOP4;
+
+    std::vector <CRecipient> vRecipient;
+    CRecipient payment = {script, 50 * CENT, false};
+    vRecipient.push_back(payment);
+
+    // Create deposit transaction
+    CReserveKey reserveKey(pwalletMain);
+    CAmount nFee;
+    int nChangePos = -1;
+    CWalletTx wtx;
+    std::string strError;
+    if (!pwalletMain->CreateTransaction(vRecipient, wtx, reserveKey, nFee, nChangePos, strError)) {
+        std::cout << "Error creating transaction: " << strError << std::endl;
+        return;
+    }
+
+    CValidationState state;
+    if (!pwalletMain->CommitTransaction(wtx, reserveKey, g_connman.get(), state)) {
+        std::cout << "Error committing transaction: " << state.GetRejectReason() << std::endl;
+        return;
+    }
+}
+
+void OverviewPage::on_pushButtonTestWithdraw_clicked()
+{
+
 }

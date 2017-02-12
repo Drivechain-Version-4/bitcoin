@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>596</width>
-    <height>342</height>
+    <width>895</width>
+    <height>488</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -419,6 +419,27 @@
          </property>
         </spacer>
        </item>
+       <item>
+        <widget class="QPushButton" name="pushButtonTestWatch">
+         <property name="text">
+          <string>Test Watch</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButtonTestDeposit">
+         <property name="text">
+          <string>Test Deposit</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButtonTestWithdraw">
+         <property name="text">
+          <string>Test Withdraw</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
@@ -536,6 +557,8 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="../bitcoin.qrc"/>
+ </resources>
  <connections/>
 </ui>
