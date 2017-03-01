@@ -68,6 +68,7 @@ private Q_SLOTS:
     void on_pushButtonTestWatch_clicked();
     void on_pushButtonTestDeposit_clicked();
     void on_pushButtonTestWithdraw_clicked();
+    void on_pushButtonGenerateScripts_clicked();
 };
 
 #endif // BITCOIN_QT_OVERVIEWPAGE_H
