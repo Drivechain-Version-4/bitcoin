@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2010 Satoshi Nakamoto
+﻿// Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -23,6 +23,7 @@
 #include "script/script.h"
 #include "script/sigcache.h"
 #include "script/standard.h"
+#include "sidechaindb.h"
 #include "timedata.h"
 #include "tinyformat.h"
 #include "txdb.h"
@@ -520,6 +521,56 @@ bool CheckTransaction(const CTransaction& tx, CValidationState &state, bool fChe
         {
             if (!vInOutPoints.insert(txin.prevout).second)
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-inputs-duplicate");
+        }
+    }
+
+    // Sidechain checks
+    {
+        // Collect coins from inputs
+        std::vector<CCoins> vCoins;
+        for (const CTxIn& in : tx.vin) {
+            CCoins coins;
+            pcoinsTip->GetCoins(in.prevout.hash, coins);
+            vCoins.push_back(coins);
+        }
+
+        // Count inputs
+        CAmount amtSidechainUTXO = CAmount(0);
+        CAmount amtUserInput = CAmount(0);
+        for (const CCoins& coins : vCoins) {
+            for (const CTxOut out : coins.vout) {
+                CScript scriptPubKey = out.scriptPubKey;
+                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+                    amtSidechainUTXO += out.nValue;
+                } else {
+                    amtUserInput += out.nValue;
+                }
+            }
+        }
+
+        if (amtSidechainUTXO)
+        {
+            // Count outputs
+            CAmount amtReturning = CAmount(0);
+            CAmount amtWithdrawn = CAmount(0);
+            for (const CTxOut out : tx.vout) {
+                CScript scriptPubKey = out.scriptPubKey;
+                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+                    amtReturning += out.nValue;
+                } else {
+                    amtWithdrawn += out.nValue;
+                }
+            }
+
+            // Withdraw
+            if (amtSidechainUTXO > amtReturning) {
+                std::cout << "amtReturning " << amtReturning << std::endl;
+                std::cout << "amtWithdrawn " << amtWithdrawn << std::endl;
+                std::cout << "amtSidechainUTXO " << amtSidechainUTXO << std::endl;
+                std::cout << "amtUserInput " << amtUserInput << std::endl;
+                // TODO check work score and approve, rejecting all for now
+                return state.DoS(100, false, REJECT_INVALID, "bad-sidechain-withdraw");
+            }
         }
     }
 

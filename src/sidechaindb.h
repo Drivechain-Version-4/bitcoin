@@ -10,9 +10,15 @@
 #include "script/script.h"
 #include "uint256.h"
 
-#include <cstdint>
 #include <string>
 #include <vector>
+
+//! KeyIDs for testing
+// 4LQSw2aWn3EuC52va1JLzCDAHud2VaougL
+// cQMQ99mA5Xi2Hm9YM3WmB2JcJai3tzGupuFb5b7HWiwNgTKoaFr5
+const std::string SIDECHAIN_TEST_KEY = "09c1fbf0ad3047fb825e0bc5911528596b7d7f49";
+static const char* const SIDECHAIN_TEST_ADDRESS = "4LQSw2aWn3EuC52va1JLzCDAHud2VaougL";
+const std::string SIDECHAIN_TEST_SCRIPT_HEX = "76a914497f7d6b59281591c50b5e82fb4730adf0fbc10988ac";
 
 struct Sidechain {
     uint8_t nSidechain;
