@@ -43,6 +43,7 @@ class CTxMemPool;
 class CValidationInterface;
 class CValidationState;
 struct ChainTxData;
+class SidechainDB;
 
 struct PrecomputedTransactionData;
 struct LockPoints;
@@ -567,5 +568,8 @@ void DumpMempool();
 
 /** Load the mempool from disk. */
 bool LoadMempool();
+
+/** Track sidechain WT^ workscores */
+extern SidechainDB scdb;
 
 #endif // BITCOIN_VALIDATION_H
