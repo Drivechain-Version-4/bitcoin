@@ -7,9 +7,11 @@
 #include "chain.h"
 #include "core_io.h"
 #include "primitives/transaction.h"
+#include "pubkey.h"
+#include "script/script.h"
+#include "uint256.h"
 #include "utilstrencodings.h"
 
-#include <iostream>
 #include <map>
 #include <sstream>
 
@@ -34,6 +36,57 @@ bool SidechainDB::AddWTJoin(uint8_t nSidechain, CTransaction wtx)
     if (Update(nSidechain, nTau, 0, wtx.GetHash())) {
         vWTJoinCache.push_back(wtx);
         return true;
+    }
+    return false;
+}
+
+void SidechainDB::AddDeposit(const CTransaction& tx)
+{
+    // Create sidechain deposit objects from transaction outputs
+    std::vector<SidechainDeposit> vDepositAdd;
+    for (size_t i = 0; i < tx.vout.size(); i++) {
+        const CScript &script = tx.vout[i].scriptPubKey;
+        if (script.size() < 3)
+            return;
+        if (script.front() != OP_RETURN)
+            return;
+
+        uint8_t nSidechain = (unsigned int)script[1];
+        if (!SidechainNumberValid(nSidechain))
+            return;
+
+        std::vector<unsigned char> vch;
+        opcodetype opcode;
+        CScript::const_iterator pkey = script.begin() + 2;
+        if (!script.GetOp2(pkey, opcode, &vch))
+            return;
+        if (vch.size() != sizeof(uint160))
+            return;
+
+        CKeyID keyID = CKeyID(uint160(vch));
+        if (keyID.IsNull())
+            return;
+
+        SidechainDeposit deposit;
+        deposit.hex = EncodeHexTx(tx);
+        deposit.keyID = keyID;
+        deposit.nSidechain = nSidechain;
+
+        vDepositAdd.push_back(deposit);
+    }
+
+    // Add deposits to cache
+    for (const SidechainDeposit& d : vDepositAdd) {
+        if (!HaveDepositCached(d))
+            vDepositCache.push_back(d);
+    }
+}
+
+bool SidechainDB::HaveDepositCached(const SidechainDeposit &deposit) const
+{
+    for (const SidechainDeposit& d : vDepositCache) {
+        if (d == deposit)
+            return true;
     }
     return false;
 }
@@ -124,22 +177,6 @@ bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, 
     if (!fJustCheck)
         SCDB[nSidechain].push_back(v);
     return true;
-}
-
-std::string Sidechain::GetSidechainName() const
-{
-    // Check that number coresponds to a valid sidechain
-    switch (nSidechain) {
-    case SIDECHAIN_TEST:
-        return "SIDECHAIN_TEST";
-    case SIDECHAIN_HIVEMIND:
-        return "SIDECHAIN_HIVEMIND";
-    case SIDECHAIN_WIMBLE:
-        return "SIDECHAIN_WIMBLE";
-    default:
-        break;
-    }
-    return "SIDECHAIN_UNKNOWN";
 }
 
 CTransaction SidechainDB::GetWTJoinTx(uint8_t nSidechain, int nHeight) const
@@ -316,10 +353,10 @@ bool SidechainDB::HasState() const
 std::vector<SidechainDeposit> SidechainDB::GetDeposits(uint8_t nSidechain) const
 {
     std::vector<SidechainDeposit> vSidechainDeposit;
-//    for (size_t i = 0; i < vDepositCache.size(); i++) {
-//        if (vDepositCache[i].nSidechain == nSidechain)
-//            vSidechainDeposit.push_back(vDepositCache[i]);
-//    }
+    for (size_t i = 0; i < vDepositCache.size(); i++) {
+        if (vDepositCache[i].nSidechain == nSidechain)
+            vSidechainDeposit.push_back(vDepositCache[i]);
+    }
     return vSidechainDeposit;
 }
 
@@ -376,4 +413,56 @@ bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std:
         }
     }
     return true;
+}
+
+std::string Sidechain::GetSidechainName() const
+{
+    // Check that number coresponds to a valid sidechain
+    switch (nSidechain) {
+    case SIDECHAIN_TEST:
+        return "SIDECHAIN_TEST";
+    case SIDECHAIN_HIVEMIND:
+        return "SIDECHAIN_HIVEMIND";
+    case SIDECHAIN_WIMBLE:
+        return "SIDECHAIN_WIMBLE";
+    default:
+        break;
+    }
+    return "SIDECHAIN_UNKNOWN";
+}
+
+bool SidechainDeposit::operator==(const SidechainDeposit& a) const
+{
+    return (a.nSidechain == nSidechain &&
+            a.keyID == keyID &&
+            a.hex == hex);
+}
+
+std::string Sidechain::ToString() const
+{
+    std::stringstream ss;
+    ss << "nSidechain=" << (unsigned int)nSidechain << std::endl;
+    ss << "nWaitPeriod=" << nWaitPeriod << std::endl;
+    ss << "nVerificationPeriod=" << nVerificationPeriod << std::endl;
+    ss << "nMinWorkScore=" << nMinWorkScore << std::endl;
+    return ss.str();
+}
+
+std::string SidechainDeposit::ToString() const
+{
+    std::stringstream ss;
+    ss << "nSidechain=" << (unsigned int)nSidechain << std::endl;
+    ss << "keyID=" << keyID.ToString() << std::endl;
+    ss << "hex=" << hex << std::endl;
+    return ss.str();
+}
+
+std::string SidechainVerification::ToString() const
+{
+    std::stringstream ss;
+    ss << "nSidechain=" << (unsigned int)nSidechain << std::endl;
+    ss << "nBlocksLeft=" << (unsigned int)nBlocksLeft << std::endl;
+    ss << "nWorkScore=" << (unsigned int)nWorkScore << std::endl;
+    ss << "wtxid=" << wtxid.ToString() << std::endl;
+    return ss.str();
 }

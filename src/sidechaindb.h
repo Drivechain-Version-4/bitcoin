@@ -5,18 +5,21 @@
 #ifndef BITCOIN_SIDECHAINDB_H
 #define BITCOIN_SIDECHAINDB_H
 
-#include "primitives/transaction.h"
 #include "pubkey.h"
-#include "script/script.h"
 #include "uint256.h"
 
 #include <string>
 #include <vector>
 
+class CScript;
+class CTransaction;
+
+/**
+ * Sidechain Keys
+ */
 //! KeyID for testing
 // 4LQSw2aWn3EuC52va1JLzCDAHud2VaougL
 static const char* const SIDECHAIN_TEST_KEY = "09c1fbf0ad3047fb825e0bc5911528596b7d7f49";
-static const char* const SIDECHAIN_TEST_ADDRESS = "4LQSw2aWn3EuC52va1JLzCDAHud2VaougL";
 static const char* const SIDECHAIN_TEST_PRIV = "cQMQ99mA5Xi2Hm9YM3WmB2JcJai3tzGupuFb5b7HWiwNgTKoaFr5";
 static const char* const SIDECHAIN_TEST_SCRIPT_HEX = "76a914497f7d6b59281591c50b5e82fb4730adf0fbc10988ac";
 
@@ -34,7 +37,7 @@ struct Sidechain {
 struct SidechainDeposit {
     uint8_t nSidechain;
     CKeyID keyID;
-    CTransaction dtx;
+    std::string hex;
 
     std::string ToString() const;
     bool operator==(const SidechainDeposit& a) const;
@@ -76,6 +79,9 @@ public:
     /** Add a new WT^ to the database */
     bool AddWTJoin(uint8_t nSidechain, CTransaction wtx);
 
+    /** Add deposit to cache */
+    void AddDeposit(const CTransaction &tx);
+
     /** Return verified WT^ for nSidechain if one exists */
     CTransaction GetWTJoinTx(uint8_t nSidechain, int nHeight) const;
 
@@ -84,6 +90,9 @@ public:
 
     /** Get all of the deposits this tau for nSidechain. */
     std::vector<SidechainDeposit> GetDeposits(uint8_t nSidechain) const;
+
+    /** Return true if the deposit is cached */
+    bool HaveDepositCached(const SidechainDeposit& deposit) const;
 
     /** Return true if the full WT^ CTransaction is cached */
     bool HaveWTJoinCached(uint256 wtxid) const;
@@ -101,6 +110,10 @@ private:
      *  full transaction(s) so that they can be looked up as needed */
     std::vector<CTransaction> vWTJoinCache;
 
+    /** Track deposits created during this tau */
+    std::vector<SidechainDeposit> vDepositCache;
+
+    /** Is there anything being tracked by the SCDB? */
     bool HasState() const;
 
     /** Get the latest scores for nSidechain's WT^(s) */

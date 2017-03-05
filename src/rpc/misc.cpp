@@ -566,7 +566,7 @@ UniValue listsidechaindeposits(const JSONRPCRequest& request)
 
         UniValue obj(UniValue::VOBJ);
         obj.push_back(Pair("nSidechain", deposit.nSidechain));
-        obj.push_back(Pair("dtx", EncodeHexTx(deposit.dtx)));
+        obj.push_back(Pair("hex", deposit.hex));
         obj.push_back(Pair("keyID", deposit.keyID.ToString()));
 
         ret.push_back(Pair("deposit", obj));

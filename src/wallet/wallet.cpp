@@ -2413,6 +2413,9 @@ bool CWallet::CreateSidechainDeposit(CTransactionRef& tx, std::string& strFail, 
         mtx.vin.push_back(CTxIn(coin.first->GetHash(),coin.second,CScript()));
     }
 
+    // Add data output
+    mtx.vout.push_back(CTxOut(CAmount(0), dataScript));
+
     // Add deposit output
     mtx.vout.push_back(CTxOut(nAmount, sidechainScript));
 
