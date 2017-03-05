@@ -189,6 +189,24 @@ enum opcodetype
 
 const char* GetOpName(opcodetype opcode);
 
+/* Sidechain state script opcodes (not really opcodes) */
+enum scopcodetype {
+    // State script version
+    SCOP_VERSION = 0x00,
+
+    // Vote types
+    SCOP_REJECT = 0x51,
+    SCOP_VERIFY = 0x52,
+    SCOP_IGNORE = 0x53,
+
+    // Delimeters
+    SCOP_VERSION_DELIM = 0x54,
+    SCOP_WT_DELIM = 0x55,
+    SCOP_SC_DELIM = 0x56,
+};
+
+const char* GetSCOPName(opcodetype opcode);
+
 class scriptnum_error : public std::runtime_error
 {
 public:
@@ -425,6 +443,24 @@ public:
         if (opcode < 0 || opcode > 0xff)
             throw std::runtime_error("CScript::operator<<(): invalid opcode");
         insert(end(), (unsigned char)opcode);
+        return *this;
+    }
+
+    CScript& operator<<(scopcodetype scopcode)
+    {
+        switch (scopcode) {
+        case SCOP_IGNORE:
+        case SCOP_REJECT:
+        case SCOP_SC_DELIM:
+        case SCOP_VERIFY:
+        case SCOP_VERSION:
+        case SCOP_VERSION_DELIM:
+        case SCOP_WT_DELIM:
+            break;
+        default:
+            throw std::runtime_error("CScript::operator<<(): invalid scopcode");
+        }
+        insert(end(), (unsigned char)scopcode);
         return *this;
     }
 

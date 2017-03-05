@@ -5,11 +5,13 @@
 
 #include "base58.h"
 #include "clientversion.h"
+#include "core_io.h"
 #include "init.h"
 #include "validation.h"
 #include "net.h"
 #include "netbase.h"
 #include "rpc/server.h"
+#include "sidechaindb.h"
 #include "timedata.h"
 #include "util.h"
 #include "utilstrencodings.h"
@@ -499,6 +501,79 @@ UniValue echo(const JSONRPCRequest& request)
     return request.params;
 }
 
+UniValue receivesidechainwtjoin(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 2)
+        throw runtime_error(
+            "receivesidechainwtjoin\n"
+            "Called by sidechain to announce new WT^ for verification\n"
+            "\nArguments:\n"
+            "1. \"nSidechain\"      (int, required) The sidechain number\n"
+            "2. \"rawtx\"           (string, required) The raw transaction hex\n"
+            "\nExamples:\n"
+            + HelpExampleCli("receivesidechainwtjoin", "")
+            + HelpExampleRpc("receivesidechainwtjoin", "")
+        );
+
+    // Is nSidechain valid?
+    uint8_t nSidechain = std::stoi(request.params[0].getValStr());
+    if (!SidechainNumberValid(nSidechain))
+        throw runtime_error("Invalid sidechain number");
+
+    // Create CTransaction from hex
+    CMutableTransaction mtx;
+    std::string hex = request.params[1].get_str();
+    DecodeHexTx(mtx, hex);
+
+    CTransaction wtJoin(mtx);
+
+    if (wtJoin.IsNull())
+        throw runtime_error("Invalid WT^ hex");
+
+    // Add WT^ to sidechain DB and start verification
+    if (!scdb.AddWTJoin(nSidechain, wtJoin))
+        throw runtime_error("WT^ rejected");
+
+    // Return WT^ hash to verify it has been received
+    UniValue ret(UniValue::VOBJ);
+    ret.push_back(Pair("wtxid", wtJoin.GetHash().GetHex()));
+    return ret;
+}
+
+UniValue listsidechaindeposits(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1)
+        throw runtime_error(
+            "listsidechaindeposits\n"
+            "Called by sidechain, return list of deposits\n"
+            "\nArguments:\n"
+            "1. \"nSidechain\"      (int, required) The sidechain number\n"
+            "\nExamples:\n"
+            + HelpExampleCli("listsidechaindeposits", "\"nSidechain\"")
+            + HelpExampleRpc("listsidechaindeposits", "\"nSidechain\"")
+            );
+
+    // Is nSidechain valid?
+    uint8_t nSidechain = std::stoi(request.params[0].getValStr());
+    if (!SidechainNumberValid(nSidechain))
+        throw runtime_error("Invalid sidechain number");
+
+    // Get deposits from sidechain DB
+    std::vector<SidechainDeposit> vDeposit = scdb.GetDeposits(nSidechain);
+    UniValue ret(UniValue::VOBJ);
+    for (size_t i = 0; i < vDeposit.size(); i++) {
+        const SidechainDeposit& deposit = vDeposit[i];
+
+        UniValue obj(UniValue::VOBJ);
+        obj.push_back(Pair("nSidechain", deposit.nSidechain));
+        obj.push_back(Pair("hex", deposit.hex));
+        obj.push_back(Pair("keyID", deposit.keyID.ToString()));
+
+        ret.push_back(Pair("deposit", obj));
+    }
+    return ret;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
@@ -512,7 +587,11 @@ static const CRPCCommand commands[] =
     /* Not shown in help */
     { "hidden",             "setmocktime",            &setmocktime,            true,  {"timestamp"}},
     { "hidden",             "echo",                   &echo,                   true,  {"arg0","arg1","arg2","arg3","arg4","arg5","arg6","arg7","arg8","arg9"}},
-    { "hidden",             "echojson",               &echo,                  true,  {"arg0","arg1","arg2","arg3","arg4","arg5","arg6","arg7","arg8","arg9"}},
+    { "hidden",             "echojson",               &echo,                   true,  {"arg0","arg1","arg2","arg3","arg4","arg5","arg6","arg7","arg8","arg9"}},
+
+    /* Used by sidechain, not shown in help */
+    { "hidden",             "receivesidechainwtjoin", &receivesidechainwtjoin, true,  {"nSidechain","rawtx"}},
+    { "hidden",             "listsidechaindeposits",  &listsidechaindeposits,  true,  {"nSidechain"}},
 };
 
 void RegisterMiscRPCCommands(CRPCTable &t)

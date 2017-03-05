@@ -400,6 +400,8 @@ public:
         }
         return false;
     }
+
+    bool HasSidechainOutput() const;
 };
 
 /** A mutable version of CTransaction. */

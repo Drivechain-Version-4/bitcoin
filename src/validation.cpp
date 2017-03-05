@@ -84,6 +84,8 @@ CAmount maxTxFee = DEFAULT_TRANSACTION_MAXFEE;
 
 CTxMemPool mempool(::minRelayTxFee);
 
+SidechainDB scdb;
+
 static void CheckBlockIndex(const Consensus::Params& consensusParams);
 
 /** Constant stuff for coinbase transactions we create: */
@@ -524,56 +526,6 @@ bool CheckTransaction(const CTransaction& tx, CValidationState &state, bool fChe
         }
     }
 
-    // Sidechain checks
-    {
-        // Collect coins from inputs
-        std::vector<CCoins> vCoins;
-        for (const CTxIn& in : tx.vin) {
-            CCoins coins;
-            pcoinsTip->GetCoins(in.prevout.hash, coins);
-            vCoins.push_back(coins);
-        }
-
-        // Count inputs
-        CAmount amtSidechainUTXO = CAmount(0);
-        CAmount amtUserInput = CAmount(0);
-        for (const CCoins& coins : vCoins) {
-            for (const CTxOut out : coins.vout) {
-                CScript scriptPubKey = out.scriptPubKey;
-                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
-                    amtSidechainUTXO += out.nValue;
-                } else {
-                    amtUserInput += out.nValue;
-                }
-            }
-        }
-
-        if (amtSidechainUTXO)
-        {
-            // Count outputs
-            CAmount amtReturning = CAmount(0);
-            CAmount amtWithdrawn = CAmount(0);
-            for (const CTxOut out : tx.vout) {
-                CScript scriptPubKey = out.scriptPubKey;
-                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
-                    amtReturning += out.nValue;
-                } else {
-                    amtWithdrawn += out.nValue;
-                }
-            }
-
-            // Withdraw
-            if (amtSidechainUTXO > amtReturning) {
-                std::cout << "amtReturning " << amtReturning << std::endl;
-                std::cout << "amtWithdrawn " << amtWithdrawn << std::endl;
-                std::cout << "amtSidechainUTXO " << amtSidechainUTXO << std::endl;
-                std::cout << "amtUserInput " << amtUserInput << std::endl;
-                // TODO check work score and approve, rejecting all for now
-                return state.DoS(100, false, REJECT_INVALID, "bad-sidechain-withdraw");
-            }
-        }
-    }
-
     if (tx.IsCoinBase())
     {
         if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 100)
@@ -642,6 +594,55 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
     bool witnessEnabled = IsWitnessEnabled(chainActive.Tip(), Params().GetConsensus());
     if (!GetBoolArg("-prematurewitness",false) && tx.HasWitness() && !witnessEnabled) {
         return state.DoS(0, false, REJECT_NONSTANDARD, "no-witness-yet", true);
+    }
+
+    // Sidechain checks
+    {
+        // Collect coins from inputs
+        std::map<const uint256, CCoins> mapCoins;
+        for (const CTxIn& in : tx.vin) {
+            CCoins coins;
+            uint256 hash = in.prevout.hash;
+            if (mapCoins.find(hash) != mapCoins.end()) {
+                pcoinsTip->GetCoins(hash, coins);
+                mapCoins[hash] = coins;
+            }
+        }
+
+        // Count inputs
+        CAmount amtSidechainUTXO = CAmount(0);
+        CAmount amtUserInput = CAmount(0);
+        for (auto it = mapCoins.begin(); it != mapCoins.end(); it++) {
+            for (const CTxOut out : it->second.vout) {
+                CScript scriptPubKey = out.scriptPubKey;
+                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+                    amtSidechainUTXO += out.nValue;
+                } else {
+                    amtUserInput += out.nValue;
+                }
+            }
+        }
+
+        if (amtSidechainUTXO)
+        {
+            // Count outputs
+            CAmount amtReturning = CAmount(0);
+            CAmount amtWithdrawn = CAmount(0);
+            for (const CTxOut out : tx.vout) {
+                CScript scriptPubKey = out.scriptPubKey;
+                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+                    amtReturning += out.nValue;
+                } else {
+                    amtWithdrawn += out.nValue;
+                }
+            }
+
+            // Withdraw
+            if (amtSidechainUTXO > amtReturning) {
+                // TODO check work score and approve, rejecting all for now
+                return state.DoS(100, false, REJECT_INVALID, "bad-sidechain-withdraw");
+            }
+        }
     }
 
     // Rather not work on nonstandard transactions (unless -testnet/-regtest)
@@ -1943,6 +1944,13 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
                                  REJECT_INVALID, "bad-txns-nonfinal");
             }
+
+            // Check for sidechain deposits
+            if (!fJustCheck && tx.HasSidechainOutput())
+                scdb.AddDeposit(tx);
+        } else if (!fJustCheck) {
+            // Check for SCDB state updates
+            scdb.Update(tx);
         }
 
         // GetTransactionSigOpCost counts 3 types of sigops:

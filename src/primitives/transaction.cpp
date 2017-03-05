@@ -6,6 +6,7 @@
 #include "primitives/transaction.h"
 
 #include "hash.h"
+#include "sidechaindb.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 
@@ -136,6 +137,16 @@ std::string CTransaction::ToString() const
     for (unsigned int i = 0; i < vout.size(); i++)
         str += "    " + vout[i].ToString() + "\n";
     return str;
+}
+
+bool CTransaction::HasSidechainOutput() const
+{
+    for (const CTxOut out : vout) {
+        CScript scriptPubKey = out.scriptPubKey;
+        if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX)
+            return true;
+    }
+    return false;
 }
 
 int64_t GetTransactionWeight(const CTransaction& tx)
