@@ -599,18 +599,21 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
     // Sidechain checks
     {
         // Collect coins from inputs
-        std::vector<CCoins> vCoins;
+        std::map<const uint256, CCoins> mapCoins;
         for (const CTxIn& in : tx.vin) {
             CCoins coins;
-            pcoinsTip->GetCoins(in.prevout.hash, coins);
-            vCoins.push_back(coins);
+            uint256 hash = in.prevout.hash;
+            if (mapCoins.find(hash) != mapCoins.end()) {
+                pcoinsTip->GetCoins(hash, coins);
+                mapCoins[hash] = coins;
+            }
         }
 
         // Count inputs
         CAmount amtSidechainUTXO = CAmount(0);
         CAmount amtUserInput = CAmount(0);
-        for (const CCoins& coins : vCoins) {
-            for (const CTxOut out : coins.vout) {
+        for (auto it = mapCoins.begin(); it != mapCoins.end(); it++) {
+            for (const CTxOut out : it->second.vout) {
                 CScript scriptPubKey = out.scriptPubKey;
                 if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
                     amtSidechainUTXO += out.nValue;
@@ -1941,6 +1944,13 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
                                  REJECT_INVALID, "bad-txns-nonfinal");
             }
+
+            // Check for sidechain deposits
+            if (!fJustCheck && tx.HasSidechainOutput())
+                scdb.AddDeposit(tx);
+        } else if (!fJustCheck) {
+            // Check for SCDB state updates
+            scdb.Update(tx);
         }
 
         // GetTransactionSigOpCost counts 3 types of sigops:
