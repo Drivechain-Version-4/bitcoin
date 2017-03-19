@@ -573,6 +573,43 @@ static bool IsCurrentForFeeEstimation()
     return true;
 }
 
+void GetSidechainValues(const CTransaction &tx, CAmount& amtSidechainUTXO, CAmount& amtUserInput,
+                        CAmount& amtReturning, CAmount& amtWithdrawn)
+{
+    // Collect coins from inputs
+    std::map<const uint256, CCoins> mapCoinsDeposit;
+    for (const CTxIn& in : tx.vin) {
+        CCoins coins;
+        uint256 hash = in.prevout.hash;
+        if (mapCoinsDeposit.find(hash) == mapCoinsDeposit.end()) {
+            pcoinsTip->GetCoins(hash, coins);
+            mapCoinsDeposit[hash] = coins;
+        }
+    }
+
+    // Count inputs
+    for (auto it = mapCoinsDeposit.begin(); it != mapCoinsDeposit.end(); it++) {
+        for (const CTxOut out : it->second.vout) {
+            CScript scriptPubKey = out.scriptPubKey;
+            if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+                amtSidechainUTXO += out.nValue;
+            } else {
+                amtUserInput += out.nValue;
+            }
+        }
+    }
+
+    // Count outputs
+    for (const CTxOut out : tx.vout) {
+        CScript scriptPubKey = out.scriptPubKey;
+        if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
+            amtReturning += out.nValue;
+        } else {
+            amtWithdrawn += out.nValue;
+        }
+    }
+}
+
 bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const CTransactionRef& ptx, bool fLimitFree,
                               bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced,
                               bool fOverrideMempoolLimit, const CAmount& nAbsurdFee, std::vector<uint256>& vHashTxnToUncache)
@@ -598,50 +635,18 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
 
     // Sidechain checks
     {
-        // Collect coins from inputs
-        std::map<const uint256, CCoins> mapCoins;
-        for (const CTxIn& in : tx.vin) {
-            CCoins coins;
-            uint256 hash = in.prevout.hash;
-            if (mapCoins.find(hash) != mapCoins.end()) {
-                pcoinsTip->GetCoins(hash, coins);
-                mapCoins[hash] = coins;
-            }
-        }
-
-        // Count inputs
         CAmount amtSidechainUTXO = CAmount(0);
         CAmount amtUserInput = CAmount(0);
-        for (auto it = mapCoins.begin(); it != mapCoins.end(); it++) {
-            for (const CTxOut out : it->second.vout) {
-                CScript scriptPubKey = out.scriptPubKey;
-                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
-                    amtSidechainUTXO += out.nValue;
-                } else {
-                    amtUserInput += out.nValue;
-                }
-            }
-        }
+        CAmount amtReturning = CAmount(0);
+        CAmount amtWithdrawn = CAmount(0);
+        GetSidechainValues(tx, amtSidechainUTXO, amtUserInput, amtReturning, amtWithdrawn);
 
-        if (amtSidechainUTXO)
-        {
-            // Count outputs
-            CAmount amtReturning = CAmount(0);
-            CAmount amtWithdrawn = CAmount(0);
-            for (const CTxOut out : tx.vout) {
-                CScript scriptPubKey = out.scriptPubKey;
-                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
-                    amtReturning += out.nValue;
-                } else {
-                    amtWithdrawn += out.nValue;
-                }
-            }
-
-            // Withdraw
-            if (amtSidechainUTXO > amtReturning) {
-                // TODO check work score and approve, rejecting all for now
-                return state.DoS(100, false, REJECT_INVALID, "bad-sidechain-withdraw");
-            }
+        // Withdraw
+        if (amtSidechainUTXO > amtReturning) {
+            // TODO check work score and approve, rejecting all for now
+            // TODO miner created WT^ will not enter the mempool so a
+            // check must also be added to connectblock
+            return state.DoS(100, false, REJECT_INVALID, "bad-sidechain-withdraw");
         }
     }
 
@@ -1946,8 +1951,16 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             }
 
             // Check for sidechain deposits
-            if (!fJustCheck && tx.HasSidechainOutput())
-                scdb.AddDeposit(tx);
+            if (!fJustCheck) {
+                bool fSidechainOutput = false;
+                for (const CTxOut out : tx.vout) {
+                    const CScript& scriptPubKey = out.scriptPubKey;
+                    if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX)
+                        fSidechainOutput = true;
+                }
+                if (fSidechainOutput)
+                    scdb.AddDeposit(tx);
+            }
         } else if (!fJustCheck) {
             // Check for SCDB state updates
             scdb.Update(tx);
