@@ -100,7 +100,6 @@ public:
     /** Update DB state with new state script */
     bool Update(const CTransaction& tx);
 
-
 private:
     /** Sidechain state database */
     std::vector<std::vector<SidechainVerification>> SCDB;
