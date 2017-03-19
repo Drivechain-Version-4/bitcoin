@@ -30,6 +30,7 @@
 #include "script/standard.h"
 #include "script/sigcache.h"
 #include "scheduler.h"
+#include "sidechaindb.h"
 #include "timedata.h"
 #include "txdb.h"
 #include "txmempool.h"
@@ -1639,6 +1640,21 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (pwalletMain)
         pwalletMain->postInitProcess(threadGroup);
 #endif
+
+    // TODO move this somewhere else
+    // Watch sidechain scripts
+    pwalletMain->MarkDirty();
+
+    std::vector<unsigned char> data(ParseHex(std::string(SIDECHAIN_TEST_SCRIPT_HEX)));
+    CScript script(data.begin(), data.end());
+
+    if (!pwalletMain->HaveWatchOnly(script))
+        pwalletMain->AddWatchOnly(script);
+
+    CTxDestination destination;
+    if (ExtractDestination(script, destination)) {
+        pwalletMain->SetAddressBook(destination, "SIDECHAIN_TEST", "receive");
+    }
 
     return !fRequestShutdown;
 }
