@@ -20,7 +20,7 @@
 #include "primitives/transaction.h"
 #include "script/script.h"
 #include "script/sign.h"
-#include "sidechaindb.h" // TODO This can be removed with better organization
+#include "sidechain.h"
 #include "timedata.h"
 #include "txmempool.h"
 #include "util.h"

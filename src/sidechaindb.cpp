@@ -8,8 +8,8 @@
 #include "chain.h"
 #include "core_io.h"
 #include "primitives/transaction.h"
-#include "pubkey.h"
 #include "script/script.h"
+#include "sidechain.h"
 #include "uint256.h"
 #include "utilstrencodings.h"
 #include "wallet/wallet.h"
@@ -20,26 +20,7 @@
 SidechainDB::SidechainDB()
 {
     // TODO Read state from historical blocks
-    SCDB.resize(ARRAYLEN(ValidSidechains));
-}
-
-bool SidechainDB::AddWTJoin(uint8_t nSidechain, CTransaction wtx)
-{
-    if (vWTJoinCache.size() >= SIDECHAIN_MAX_WT)
-        return false;
-    if (!SidechainNumberValid(nSidechain))
-        return false;
-    if (HaveWTJoinCached(wtx.GetHash()))
-        return false;
-
-    const Sidechain& s = ValidSidechains[nSidechain];
-    uint16_t nTau = s.nWaitPeriod + s.nVerificationPeriod;
-
-    if (Update(nSidechain, nTau, 0, wtx.GetHash())) {
-        vWTJoinCache.push_back(wtx);
-        return true;
-    }
-    return false;
+    SCDB.resize(ValidSidechains.size());
 }
 
 void SidechainDB::AddDeposit(const CTransaction& tx)
@@ -84,6 +65,25 @@ void SidechainDB::AddDeposit(const CTransaction& tx)
     }
 }
 
+bool SidechainDB::AddWTJoin(uint8_t nSidechain, CTransaction wtx)
+{
+    if (vWTJoinCache.size() >= SIDECHAIN_MAX_WT)
+        return false;
+    if (!SidechainNumberValid(nSidechain))
+        return false;
+    if (HaveWTJoinCached(wtx.GetHash()))
+        return false;
+
+    const Sidechain& s = ValidSidechains[nSidechain];
+    uint16_t nTau = s.nWaitPeriod + s.nVerificationPeriod;
+
+    if (Update(nSidechain, nTau, 0, wtx.GetHash())) {
+        vWTJoinCache.push_back(wtx);
+        return true;
+    }
+    return false;
+}
+
 bool SidechainDB::HaveDepositCached(const SidechainDeposit &deposit) const
 {
     for (const SidechainDeposit& d : vDepositCache) {
@@ -102,84 +102,14 @@ bool SidechainDB::HaveWTJoinCached(uint256 wtxid) const
     return false;
 }
 
-bool SidechainDB::Update(const CTransaction& tx)
+std::vector<SidechainDeposit> SidechainDB::GetDeposits(uint8_t nSidechain) const
 {
-    /*
-     * Only one state script of the current version is valid.
-     * State scripts with invalid version numbers will be ignored.
-     * If there are multiple state scripts with valid version numbers
-     * the entire coinbase will be ignored by SCDB and a default
-     * ignore vote will be cast. If there isn't a state update in
-     * the transaction outputs, a default ignore vote will be cast.
-     */
-    if (!HasState())
-        return false;
-
-    // Collect potentially valid state scripts
-    std::vector<CScript> vStateScript;
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        const CScript& scriptPubKey = tx.vout[i].scriptPubKey;
-        if (scriptPubKey.size() < 3)
-            continue;
-        // State script begins with OP_RETURN
-        if (scriptPubKey[0] != OP_RETURN)
-            continue;
-        // Check state script version
-        if (scriptPubKey[1] != SCOP_VERSION || scriptPubKey[2] != SCOP_VERSION_DELIM)
-            continue;
-        vStateScript.push_back(scriptPubKey);
+    std::vector<SidechainDeposit> vSidechainDeposit;
+    for (size_t i = 0; i < vDepositCache.size(); i++) {
+        if (vDepositCache[i].nSidechain == nSidechain)
+            vSidechainDeposit.push_back(vDepositCache[i]);
     }
-
-    // First case: Invalid update. Ignore state script, cast all ignore votes
-    if (vStateScript.size() != 1) {
-        // Collect WT^(s) that need to be updated
-        std::vector<SidechainVerification> vNeedUpdate;
-        for (const Sidechain& s : ValidSidechains) {
-            const std::vector<SidechainVerification> vScores = GetLastVerifications(s.nSidechain);
-            for (const SidechainVerification& v : vScores)
-                vNeedUpdate.push_back(v);
-        }
-
-        // Check that the updates can be applied
-        for (const SidechainVerification& v : vNeedUpdate) {
-            if (!Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid, true))
-                return false;
-        }
-        // Apply the updates
-        for (const SidechainVerification& v : vNeedUpdate)
-            Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid);
-        return true;
-    }
-
-    // Collect scores that need updating
-    std::vector<std::vector<SidechainVerification>> vScores;
-    for (const Sidechain& s : ValidSidechains) {
-        const std::vector<SidechainVerification>& vSidechainLatest = GetLastVerifications(s.nSidechain);
-        vScores.push_back(vSidechainLatest);
-    }
-
-    // Second case: potentially valid update script, attempt to update SCDB
-    const CScript& state = vStateScript.front();
-    if (ApplyStateScript(state, vScores, true))
-        return ApplyStateScript(state, vScores);
-
-    return false;
-}
-
-bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck)
-{
-    if (!SidechainNumberValid(nSidechain))
-        return false;
-
-    SidechainVerification v;
-    v.nBlocksLeft = nBlocks;
-    v.nSidechain = nSidechain;
-    v.nWorkScore = nScore;
-    v.wtxid = wtxid;
-
-    if (!fJustCheck)
-        SCDB[nSidechain].push_back(v);
-    return true;
+    return vSidechainDeposit;
 }
 
 CTransaction SidechainDB::GetWTJoinTx(uint8_t nSidechain, int nHeight) const
@@ -290,54 +220,6 @@ CTransaction SidechainDB::GetWTJoinTx(uint8_t nSidechain, int nHeight) const
     return mtx;
 }
 
-bool SidechainNumberValid(uint8_t nSidechain)
-{
-    if (nSidechain > ARRAYLEN(ValidSidechains))
-        return false;
-
-    // Check that number coresponds to a valid sidechain
-    switch (nSidechain) {
-    case SIDECHAIN_TEST:
-    case SIDECHAIN_HIVEMIND:
-    case SIDECHAIN_WIMBLE:
-        return true;
-    default:
-        return false;
-    }
-}
-
-std::vector<SidechainVerification> SidechainDB::GetLastVerifications(uint8_t nSidechain) const
-{
-    if (!HasState() || !SidechainNumberValid(nSidechain))
-        return std::vector<SidechainVerification>();
-
-    // Go through SCDB and find newest verification for each WT^
-    std::map<uint256, SidechainVerification> mapScores;
-    // This vector tracks the order in which verifications entered the SCDB
-    std::vector<SidechainVerification> vLastVerification;
-    for (size_t x = 0; x < SCDB[nSidechain].size(); x++) {
-        const SidechainVerification &v = SCDB[nSidechain][x];
-
-        std::map<uint256, SidechainVerification>::iterator it = mapScores.find(v.wtxid);
-        if (it != mapScores.end()) {
-            // We already found the latest verification
-            if (it->second.nWorkScore < v.nWorkScore)
-                it->second = v;
-        } else {
-            // Add latest verification for undiscoverd WT^
-            mapScores[v.wtxid] = v;
-            vLastVerification.push_back(v);
-        }
-    }
-    // Update properly sorted list of verifications with found scores
-    for (size_t i = 0; i < vLastVerification.size(); i++) {
-        std::map<uint256, SidechainVerification>::iterator it = mapScores.find(vLastVerification[i].wtxid);
-        if (it != mapScores.end())
-            vLastVerification[i] = it->second;
-    }
-    return vLastVerification;
-}
-
 CScript SidechainDB::CreateStateScript(int nHeight) const
 {
     /*
@@ -394,15 +276,84 @@ CScript SidechainDB::CreateStateScript(int nHeight) const
     return script;
 }
 
-int SidechainDB::GetLastTauHeight(const Sidechain& sidechain, int nHeight) const
+bool SidechainDB::Update(const CTransaction& tx)
 {
-    uint16_t nTau = (sidechain.nWaitPeriod + sidechain.nVerificationPeriod);
-    for (;;) {
-        if (nHeight % nTau == 0) break;
-        if (nHeight == 0) break;
-        nHeight--;
+    /*
+     * Only one state script of the current version is valid.
+     * State scripts with invalid version numbers will be ignored.
+     * If there are multiple state scripts with valid version numbers
+     * the entire coinbase will be ignored by SCDB and a default
+     * ignore vote will be cast. If there isn't a state update in
+     * the transaction outputs, a default ignore vote will be cast.
+     */
+    if (!HasState())
+        return false;
+
+    // Collect potentially valid state scripts
+    std::vector<CScript> vStateScript;
+    for (size_t i = 0; i < tx.vout.size(); i++) {
+        const CScript& scriptPubKey = tx.vout[i].scriptPubKey;
+        if (scriptPubKey.size() < 3)
+            continue;
+        // State script begins with OP_RETURN
+        if (scriptPubKey[0] != OP_RETURN)
+            continue;
+        // Check state script version
+        if (scriptPubKey[1] != SCOP_VERSION || scriptPubKey[2] != SCOP_VERSION_DELIM)
+            continue;
+        vStateScript.push_back(scriptPubKey);
     }
-    return nHeight;
+
+    // First case: Invalid update. Ignore state script, cast all ignore votes
+    if (vStateScript.size() != 1) {
+        // Collect WT^(s) that need to be updated
+        std::vector<SidechainVerification> vNeedUpdate;
+        for (const Sidechain& s : ValidSidechains) {
+            const std::vector<SidechainVerification> vScores = GetLastVerifications(s.nSidechain);
+            for (const SidechainVerification& v : vScores)
+                vNeedUpdate.push_back(v);
+        }
+
+        // Check that the updates can be applied
+        for (const SidechainVerification& v : vNeedUpdate) {
+            if (!Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid, true))
+                return false;
+        }
+        // Apply the updates
+        for (const SidechainVerification& v : vNeedUpdate)
+            Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid);
+        return true;
+    }
+
+    // Collect scores that need updating
+    std::vector<std::vector<SidechainVerification>> vScores;
+    for (const Sidechain& s : ValidSidechains) {
+        const std::vector<SidechainVerification>& vSidechainLatest = GetLastVerifications(s.nSidechain);
+        vScores.push_back(vSidechainLatest);
+    }
+
+    // Second case: potentially valid update script, attempt to update SCDB
+    const CScript& state = vStateScript.front();
+    if (ApplyStateScript(state, vScores, true))
+        return ApplyStateScript(state, vScores);
+
+    return false;
+}
+
+bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck)
+{
+    if (!SidechainNumberValid(nSidechain))
+        return false;
+
+    SidechainVerification v;
+    v.nBlocksLeft = nBlocks;
+    v.nSidechain = nSidechain;
+    v.nWorkScore = nScore;
+    v.wtxid = wtxid;
+
+    if (!fJustCheck)
+        SCDB[nSidechain].push_back(v);
+    return true;
 }
 
 bool SidechainDB::HasState() const
@@ -422,14 +373,47 @@ bool SidechainDB::HasState() const
     return false;
 }
 
-std::vector<SidechainDeposit> SidechainDB::GetDeposits(uint8_t nSidechain) const
+int SidechainDB::GetLastTauHeight(const Sidechain& sidechain, int nHeight) const
 {
-    std::vector<SidechainDeposit> vSidechainDeposit;
-    for (size_t i = 0; i < vDepositCache.size(); i++) {
-        if (vDepositCache[i].nSidechain == nSidechain)
-            vSidechainDeposit.push_back(vDepositCache[i]);
+    uint16_t nTau = (sidechain.nWaitPeriod + sidechain.nVerificationPeriod);
+    for (;;) {
+        if (nHeight % nTau == 0) break;
+        if (nHeight == 0) break;
+        nHeight--;
     }
-    return vSidechainDeposit;
+    return nHeight;
+}
+
+std::vector<SidechainVerification> SidechainDB::GetLastVerifications(uint8_t nSidechain) const
+{
+    if (!HasState() || !SidechainNumberValid(nSidechain))
+        return std::vector<SidechainVerification>();
+
+    // Go through SCDB and find newest verification for each WT^
+    std::map<uint256, SidechainVerification> mapScores;
+    // This vector tracks the order in which verifications entered the SCDB
+    std::vector<SidechainVerification> vLastVerification;
+    for (size_t x = 0; x < SCDB[nSidechain].size(); x++) {
+        const SidechainVerification &v = SCDB[nSidechain][x];
+
+        std::map<uint256, SidechainVerification>::iterator it = mapScores.find(v.wtxid);
+        if (it != mapScores.end()) {
+            // We already found the latest verification
+            if (it->second.nWorkScore < v.nWorkScore)
+                it->second = v;
+        } else {
+            // Add latest verification for undiscoverd WT^
+            mapScores[v.wtxid] = v;
+            vLastVerification.push_back(v);
+        }
+    }
+    // Update properly sorted list of verifications with found scores
+    for (size_t i = 0; i < vLastVerification.size(); i++) {
+        std::map<uint256, SidechainVerification>::iterator it = mapScores.find(vLastVerification[i].wtxid);
+        if (it != mapScores.end())
+            vLastVerification[i] = it->second;
+    }
+    return vLastVerification;
 }
 
 bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std::vector<SidechainVerification>>& vScores, bool fJustCheck)

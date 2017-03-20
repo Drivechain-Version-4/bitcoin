@@ -23,6 +23,7 @@
 #include "script/script.h"
 #include "script/sigcache.h"
 #include "script/standard.h"
+#include "sidechain.h"
 #include "sidechaindb.h"
 #include "timedata.h"
 #include "tinyformat.h"

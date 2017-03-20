@@ -19,6 +19,7 @@
 #include "pow.h"
 #include "primitives/transaction.h"
 #include "script/standard.h"
+#include "sidechain.h"
 #include "sidechaindb.h"
 #include "timedata.h"
 #include "txmempool.h"

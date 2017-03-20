@@ -30,7 +30,7 @@
 #include "script/standard.h"
 #include "script/sigcache.h"
 #include "scheduler.h"
-#include "sidechaindb.h"
+#include "sidechain.h"
 #include "timedata.h"
 #include "txdb.h"
 #include "txmempool.h"
