@@ -573,7 +573,7 @@ UniValue listsidechaindeposits(const JSONRPCRequest& request)
     // Decode raw deposit hex
     CMutableTransaction mtx;
     if (!DecodeHexTx(mtx, deposit.hex))
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "Cannoted decode deposit");
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Cannot decode deposit");
 
     // Add deposit txid to set
     uint256 txid = mtx.GetHash();

@@ -590,7 +590,7 @@ void GetSidechainValues(const CTransaction &tx, CAmount& amtSidechainUTXO, CAmou
 
     // Count inputs
     for (auto it = mapCoinsDeposit.begin(); it != mapCoinsDeposit.end(); it++) {
-        for (const CTxOut out : it->second.vout) {
+        for (const CTxOut& out : it->second.vout) {
             CScript scriptPubKey = out.scriptPubKey;
             if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
                 amtSidechainUTXO += out.nValue;
@@ -601,7 +601,7 @@ void GetSidechainValues(const CTransaction &tx, CAmount& amtSidechainUTXO, CAmou
     }
 
     // Count outputs
-    for (const CTxOut out : tx.vout) {
+    for (const CTxOut& out : tx.vout) {
         CScript scriptPubKey = out.scriptPubKey;
         if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX) {
             amtReturning += out.nValue;
@@ -609,6 +609,20 @@ void GetSidechainValues(const CTransaction &tx, CAmount& amtSidechainUTXO, CAmou
             amtWithdrawn += out.nValue;
         }
     }
+}
+
+bool CheckBWTHash(const uint256& wtjID, const CTransaction &tx)
+{
+    CMutableTransaction mtx = tx;
+
+    // Remove inputs & change output
+    mtx.vin.clear();
+    mtx.vout.pop_back();
+
+    if (mtx.GetHash() == wtjID)
+        return true;
+
+    return false;
 }
 
 bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const CTransactionRef& ptx, bool fLimitFree,
@@ -1932,9 +1946,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
         nInputs += tx.vin.size();
 
+        bool fSidechainInputs = false;
         if (!tx.IsCoinBase())
         {
-            if (!view.HaveInputs(tx))
+            if (!view.HaveInputs(tx, &fSidechainInputs))
                 return state.DoS(100, error("ConnectBlock(): inputs missing/spent"),
                                  REJECT_INVALID, "bad-txns-inputs-missingorspent");
 
@@ -1950,23 +1965,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
                                  REJECT_INVALID, "bad-txns-nonfinal");
             }
-
-            // Check for sidechain deposits
-            if (!fJustCheck) {
-                bool fSidechainOutput = false;
-                for (const CTxOut out : tx.vout) {
-                    const CScript& scriptPubKey = out.scriptPubKey;
-                    if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX)
-                        fSidechainOutput = true;
-                }
-                if (fSidechainOutput)
-                    scdb.AddDeposit(tx);
-            }
-        } else if (!fJustCheck) {
-            // Check for SCDB state updates
-            scdb.Update(tx);
         }
-
         // GetTransactionSigOpCost counts 3 types of sigops:
         // * legacy (always)
         // * p2sh (when P2SH enabled in flags and excludes coinbase)
@@ -1987,6 +1986,28 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return error("ConnectBlock(): CheckInputs on %s failed with %s",
                     tx.GetHash().ToString(), FormatStateMessage(state));
             control.Add(vChecks);
+        }
+
+        if (fSidechainInputs) {
+            // Check BWT
+            // Check workscore
+        }
+
+        if (!tx.IsCoinBase() && !fJustCheck) {
+            // Check for sidechain deposits
+            bool fSidechainOutput = false;
+            for (const CTxOut out : tx.vout) {
+                const CScript& scriptPubKey = out.scriptPubKey;
+                if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX)
+                    fSidechainOutput = true;
+            }
+            if (fSidechainOutput)
+                scdb.AddDeposit(tx);
+        }
+        else
+        if (tx.IsCoinBase() && !fJustCheck) {
+            // Check for SCDB state updates
+            scdb.Update(tx);
         }
 
         CTxUndo undoDummy;

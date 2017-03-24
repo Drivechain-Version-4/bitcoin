@@ -48,6 +48,16 @@ struct SidechainVerification {
     uint256 wtxid;
 
     std::string ToString() const;
+
+    ADD_SERIALIZE_METHODS
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(nSidechain);
+        READWRITE(nBlocksLeft);
+        READWRITE(nWorkScore);
+        READWRITE(wtxid);
+    }
 };
 
 enum SidechainNumber {
@@ -56,8 +66,7 @@ enum SidechainNumber {
     SIDECHAIN_WIMBLE = 2
 };
 
-//static const Sidechain ValidSidechains[] =
-static const std::vector<Sidechain> ValidSidechains =
+static const Sidechain ValidSidechains[] =
 {
     // {nSidechain, nWaitPeriod, nVerificationPeriod, nMinWorkScore}
     {SIDECHAIN_TEST, 100, 200, 100},

@@ -22,10 +22,10 @@ public:
     SidechainDB();
 
     /** Add deposit to cache */
-    void AddDeposit(const CTransaction &tx);
+    void AddDeposit(const CTransaction& tx);
 
     /** Add a new WT^ to the database */
-    bool AddWTJoin(uint8_t nSidechain, CTransaction wtx);
+    bool AddWTJoin(uint8_t nSidechain, const CTransaction& tx);
 
     /** Return true if the deposit is cached */
     bool HaveDepositCached(const SidechainDeposit& deposit) const;
@@ -44,6 +44,9 @@ public:
 
     /** Create a script with OP_RETURN data representing the DB state */
     CScript CreateStateScript(int nHeight) const;
+
+    /** Return serialization hash of SCDB latest verification(s) */
+    uint256 CreateSCDBHash() const;
 
 private:
     /** Sidechain state database */

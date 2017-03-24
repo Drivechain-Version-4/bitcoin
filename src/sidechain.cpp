@@ -3,10 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "sidechain.h"
+#include "utilstrencodings.h"
 
 bool SidechainNumberValid(uint8_t nSidechain)
 {
-    if (nSidechain > ValidSidechains.size())
+    if (!(nSidechain < ARRAYLEN(ValidSidechains)))
         return false;
 
     // Check that number coresponds to a valid sidechain

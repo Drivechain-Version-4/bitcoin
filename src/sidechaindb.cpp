@@ -20,7 +20,7 @@
 SidechainDB::SidechainDB()
 {
     // TODO Read state from historical blocks
-    SCDB.resize(ValidSidechains.size());
+    SCDB.resize(ARRAYLEN(ValidSidechains));
 }
 
 void SidechainDB::AddDeposit(const CTransaction& tx)
@@ -65,20 +65,20 @@ void SidechainDB::AddDeposit(const CTransaction& tx)
     }
 }
 
-bool SidechainDB::AddWTJoin(uint8_t nSidechain, CTransaction wtx)
+bool SidechainDB::AddWTJoin(uint8_t nSidechain, const CTransaction& tx)
 {
     if (vWTJoinCache.size() >= SIDECHAIN_MAX_WT)
         return false;
     if (!SidechainNumberValid(nSidechain))
         return false;
-    if (HaveWTJoinCached(wtx.GetHash()))
+    if (HaveWTJoinCached(tx.GetHash()))
         return false;
 
     const Sidechain& s = ValidSidechains[nSidechain];
     uint16_t nTau = s.nWaitPeriod + s.nVerificationPeriod;
 
-    if (Update(nSidechain, nTau, 0, wtx.GetHash())) {
-        vWTJoinCache.push_back(wtx);
+    if (Update(nSidechain, nTau, 0, tx.GetHash())) {
+        vWTJoinCache.push_back(tx);
         return true;
     }
     return false;
@@ -276,6 +276,17 @@ CScript SidechainDB::CreateStateScript(int nHeight) const
     return script;
 }
 
+uint256 SidechainDB::CreateSCDBHash() const
+{
+    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+    for (size_t i = 0; i < SCDB.size(); i++) {
+        if (!SCDB[i].size())
+            continue;
+        ss << SCDB[i].back();
+    }
+    return ss.GetHash();
+}
+
 bool SidechainDB::Update(const CTransaction& tx)
 {
     /*
@@ -358,7 +369,7 @@ bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, 
 
 bool SidechainDB::HasState() const
 {
-    if (SCDB.size() < ARRAYLEN(ValidSidechains))
+    if (SCDB.size() != ARRAYLEN(ValidSidechains))
         return false;
 
     if (!SCDB[SIDECHAIN_TEST].empty())
