@@ -14,6 +14,7 @@
 #include "chain.h"
 #include "coins.h"
 #include "net.h"
+#include "primitives/sidechain.h"
 #include "script/script_error.h"
 #include "sync.h"
 #include "validationinterface.h"
@@ -32,6 +33,7 @@
 
 class CBlockIndex;
 class CBlockTreeDB;
+class CSidechainTreeDB;
 class CBloomFilter;
 class CChainParams;
 class CInv;
@@ -40,6 +42,8 @@ class CScriptCheck;
 class CTxMemPool;
 class CValidationInterface;
 class CValidationState;
+
+class SidechainDB;
 
 struct PrecomputedTransactionData;
 struct LockPoints;
@@ -182,6 +186,9 @@ extern CAmount maxTxFee;
 extern int64_t nMaxTipAge;
 extern bool fEnableReplacement;
 
+/** SidechainDB */
+extern SidechainDB scdb;
+
 /** Best header we've seen so far (used for getheaders queries' starting points). */
 extern CBlockIndex *pindexBestHeader;
 
@@ -262,7 +269,6 @@ std::string GetWarnings(const std::string& strFor);
 bool GetTransaction(const uint256 &hash, CTransaction &tx, const Consensus::Params& params, uint256 &hashBlock, bool fAllowSlow = false);
 /** Find the best known block, and make it the tip of the block chain */
 bool ActivateBestChain(CValidationState& state, const CChainParams& chainparams, const CBlock* pblock = NULL);
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 
 /**
  * Prune block and undo files (blk???.dat and undo???.dat) so that the disk space used is less than a user-defined target.
@@ -512,6 +518,9 @@ extern CCoinsViewCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern CBlockTreeDB *pblocktree;
+
+/** Global variable that points to the active sidechain tree (protected by cs_main) */
+extern CSidechainTreeDB *psidechaintree;
 
 /**
  * Return the spend height, which is one more than the inputs.GetBestBlock().

@@ -265,6 +265,8 @@ libbitcoin_consensus_a_SOURCES = \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
+  primitives/sidechain.cpp \
+  primitives/sidechain.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
   pubkey.cpp \
@@ -277,6 +279,10 @@ libbitcoin_consensus_a_SOURCES = \
   script/script_error.cpp \
   script/script_error.h \
   serialize.h \
+  sidechainclient.cpp \
+  sidechainclient.h \
+  sidechaindb.cpp \
+  sidechaindb.h \
   tinyformat.h \
   uint256.cpp \
   uint256.h \
