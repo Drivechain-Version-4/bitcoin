@@ -20,7 +20,7 @@
 #include "primitives/transaction.h"
 #include "script/script.h"
 #include "script/sign.h"
-#include "sidechaindb.h"
+#include "sidechain.h"
 #include "timedata.h"
 #include "txmempool.h"
 #include "util.h"
@@ -2086,7 +2086,6 @@ void CWallet::AvailableSidechainCoins(std::vector<COutput>& vSidechainCoins, con
     }
 }
 
-
 static void ApproximateBestSubset(vector<pair<CAmount, pair<const CWalletTx*,unsigned int> > >vValue, const CAmount& nTotalLower, const CAmount& nTargetValue,
                                   vector<char>& vfBest, CAmount& nBest, int iterations = 1000)
 {
@@ -2367,7 +2366,6 @@ bool CWallet::CreateSidechainDeposit(CTransactionRef& tx, std::string& strFail, 
 {
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
-    // TODO
     // User deposit data script
     CScript dataScript = CScript() << OP_RETURN << nSidechain << ToByteVector(keyID);
 

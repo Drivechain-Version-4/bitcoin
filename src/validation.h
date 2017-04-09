@@ -314,6 +314,13 @@ void PruneAndFlush();
 /** Prune block files up to a given height */
 void PruneBlockFilesManual(int nPruneUpToHeight);
 
+/** Calculate input and output values specific
+ *  to sidechain deposit transactions */
+void GetSidechainValues(const CTransaction& tx, CAmount& amtSidechainUTXO, CAmount& amtUserInput,
+                        CAmount& amtReturning, CAmount& amtWithdrawn);
+
+bool CheckBWTHash(const uint256& wtjID, const CTransaction& tx);
+
 /** (try to) add transaction to memory pool
  * plTxnReplaced will be appended to with all transactions replaced from mempool **/
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx, bool fLimitFree,

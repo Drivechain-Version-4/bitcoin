@@ -11,7 +11,7 @@
 #include "guiutil.h"
 #include "net.h"
 #include "primitives/transaction.h"
-#include "sidechaindb.h"
+#include "sidechain.h"
 #include "txdb.h"
 #include "wallet/wallet.h"
 
@@ -57,7 +57,7 @@ void SidechainDepositDialog::on_pushButtonDeposit_clicked()
 
     unsigned int nSidechain = ui->comboBoxSidechains->currentIndex();
 
-    if (nSidechain > ARRAYLEN(ValidSidechains)) {
+    if (!SidechainNumberValid(nSidechain)) {
         // Should never be displayed
         messageBox.setWindowTitle("Invalid sidechain selected");
         messageBox.exec();

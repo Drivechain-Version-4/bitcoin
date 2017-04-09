@@ -8,13 +8,17 @@
 #include "core_io.h"
 #include "init.h"
 #include "validation.h"
+#include "merkleblock.h"
 #include "net.h"
 #include "netbase.h"
 #include "rpc/server.h"
+#include "sidechain.h"
 #include "sidechaindb.h"
 #include "timedata.h"
 #include "util.h"
+#include "utilmoneystr.h"
 #include "utilstrencodings.h"
+#include "validation.h"
 #ifdef ENABLE_WALLET
 #include "wallet/wallet.h"
 #include "wallet/walletdb.h"
@@ -558,19 +562,79 @@ UniValue listsidechaindeposits(const JSONRPCRequest& request)
     if (!SidechainNumberValid(nSidechain))
         throw runtime_error("Invalid sidechain number");
 
-    // Get deposits from sidechain DB
+    LOCK(cs_main);
+
+    // Get latest deposit from sidechain DB deposit cache
     std::vector<SidechainDeposit> vDeposit = scdb.GetDeposits(nSidechain);
+    if (!vDeposit.size())
+        throw runtime_error("No deposits in cache");
+    const SidechainDeposit& deposit = vDeposit.back();
+
+    // Decode raw deposit hex
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, deposit.hex))
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Cannot decode deposit");
+
+    // Add deposit txid to set
+    uint256 txid = mtx.GetHash();
+    set<uint256> setTxids;
+    setTxids.insert(txid);
+
+    // Get deposit output
+    CBlockIndex* pblockindex = NULL;
+    CCoins coins;
+    if (pcoinsTip->GetCoins(txid, coins) && coins.nHeight > 0 && coins.nHeight <= chainActive.Height())
+        pblockindex = chainActive[coins.nHeight];
+
+    if (pblockindex == NULL)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't get coins");
+
+    // Read block containing deposit output
+    CBlock block;
+    if(!ReadBlockFromDisk(block, pblockindex, Params().GetConsensus()))
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
+
+    // Look for deposit transaction
+    bool found = false;
+    for (const auto& tx : block.vtx)
+        if (tx->GetHash() == txid)
+            found = true;
+    if (!found)
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "transaction not found in specified block");
+
+    // Serialize and take hex of txout proof
+    CDataStream ssMB(SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS);
+    CMerkleBlock mb(block, setTxids);
+    ssMB << mb;
+    std::string strProofHex = HexStr(ssMB.begin(), ssMB.end());
+
+    // Calculate user payout
+    CAmount amtSidechainUTXO = CAmount(0);
+    CAmount amtUserInput = CAmount(0);
+    CAmount amtReturning = CAmount(0);
+    CAmount amtWithdrawn = CAmount(0);
+    GetSidechainValues(mtx, amtSidechainUTXO, amtUserInput, amtReturning, amtWithdrawn);
+
+    std::vector<COutput> vSidechainCoins;
+    pwalletMain->AvailableSidechainCoins(vSidechainCoins, nSidechain);
+
+    amtSidechainUTXO = 0;
+    for (const COutput& output : vSidechainCoins)
+        amtSidechainUTXO += output.tx->tx->vout[output.i].nValue;
+
+    // TODO use BMM to calculate
+    CAmount amtUserPayout = amtReturning;
+
     UniValue ret(UniValue::VOBJ);
-    for (size_t i = 0; i < vDeposit.size(); i++) {
-        const SidechainDeposit& deposit = vDeposit[i];
+    UniValue obj(UniValue::VOBJ);
+    obj.push_back(Pair("nSidechain", deposit.nSidechain));
+    obj.push_back(Pair("keyID", deposit.keyID.ToString()));
+    obj.push_back(Pair("amountUserPayout", ValueFromAmount(amtUserPayout)));
+    obj.push_back(Pair("txHex", deposit.hex));
+    obj.push_back(Pair("proofHex", strProofHex));
 
-        UniValue obj(UniValue::VOBJ);
-        obj.push_back(Pair("nSidechain", deposit.nSidechain));
-        obj.push_back(Pair("hex", deposit.hex));
-        obj.push_back(Pair("keyID", deposit.keyID.ToString()));
+    ret.push_back(Pair("deposit", obj));
 
-        ret.push_back(Pair("deposit", obj));
-    }
     return ret;
 }
 

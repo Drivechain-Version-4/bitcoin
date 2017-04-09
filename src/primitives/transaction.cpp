@@ -139,16 +139,6 @@ std::string CTransaction::ToString() const
     return str;
 }
 
-bool CTransaction::HasSidechainOutput() const
-{
-    for (const CTxOut out : vout) {
-        CScript scriptPubKey = out.scriptPubKey;
-        if (HexStr(scriptPubKey) == SIDECHAIN_TEST_SCRIPT_HEX)
-            return true;
-    }
-    return false;
-}
-
 int64_t GetTransactionWeight(const CTransaction& tx)
 {
     return ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR -1) + ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
