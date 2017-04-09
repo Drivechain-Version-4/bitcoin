@@ -169,7 +169,8 @@ enum opcodetype
     OP_NOP2 = OP_CHECKLOCKTIMEVERIFY,
     OP_CHECKSEQUENCEVERIFY = 0xb2,
     OP_NOP3 = OP_CHECKSEQUENCEVERIFY,
-    OP_NOP4 = 0xb3,
+    OP_CHECKWORKSCORE = 0xb3,
+    OP_NOP4 = OP_CHECKWORKSCORE,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
     OP_NOP7 = 0xb6,
@@ -187,7 +188,24 @@ enum opcodetype
     OP_INVALIDOPCODE = 0xff,
 };
 
+/* Sidechain state script opcodes (not really opcodes) */
+enum scopcodetype {
+    // State script version
+    SCOP_VERSION = 0x00,
+
+    // Vote types
+    SCOP_REJECT = 0x51,
+    SCOP_VERIFY = 0x52,
+    SCOP_IGNORE = 0x53,
+
+    // Delimeters
+    SCOP_VERSION_DELIM = 0x54,
+    SCOP_WT_DELIM = 0x55,
+    SCOP_SC_DELIM = 0x56,
+};
+
 const char* GetOpName(opcodetype opcode);
+const char* GetSCOPName(opcodetype opcode);
 
 class scriptnum_error : public std::runtime_error
 {
@@ -429,6 +447,24 @@ public:
         return *this;
     }
 
+    CScript& operator<<(scopcodetype scopcode)
+    {
+        switch (scopcode) {
+        case SCOP_IGNORE:
+        case SCOP_REJECT:
+        case SCOP_SC_DELIM:
+        case SCOP_VERIFY:
+        case SCOP_VERSION:
+        case SCOP_VERSION_DELIM:
+        case SCOP_WT_DELIM:
+            break;
+        default:
+            throw std::runtime_error("CScript::operator<<(): invalid scopcode");
+        }
+        insert(end(), (unsigned char)scopcode);
+        return *this;
+    }
+
     CScript& operator<<(const CScriptNum& b)
     {
         *this << b.getvch();
@@ -636,6 +672,12 @@ public:
     bool IsUnspendable() const
     {
         return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
+    }
+
+    /** Return whether script is workscore (sidechain deposit) script */
+    bool IsWorkScoreScript() const
+    {
+        return (size() > 0 && back() == OP_CHECKWORKSCORE);
     }
 
     void clear()
