@@ -2005,7 +2005,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 scdb.AddDeposit(tx);
         }
         else
-        if (tx.IsCoinBase() && !fJustCheck) {
+        if (!fJustCheck && tx.IsCoinBase()) {
             // Check for SCDB state updates
             scdb.Update(tx);
         }
@@ -4394,6 +4394,58 @@ double GuessVerificationProgress(const ChainTxData& data, CBlockIndex *pindex) {
     }
 
     return pindex->nChainTx / fTxTotal;
+}
+
+bool GetTxOutProof(const uint256& txid, const uint256& hashBlock, std::string& strProof)
+{
+    LOCK(cs_main);
+
+    CBlockIndex* pblockindex = NULL;
+
+    if (!mapBlockIndex.count(hashBlock))
+        return false;
+    pblockindex = mapBlockIndex[hashBlock];
+
+    CBlock block;
+    if(!ReadBlockFromDisk(block, pblockindex, Params().GetConsensus()))
+        return false;
+
+    bool fTxFound = false;
+    for (const auto& tx : block.vtx)
+        if (tx->GetHash() == txid)
+            fTxFound = true;
+
+    if (!fTxFound)
+        return false;
+
+    std::set<uint256> setTxids;
+    setTxids.insert(txid);
+
+    CDataStream ssMB(SER_NETWORK, PROTOCOL_VERSION);
+    CMerkleBlock mb(block, setTxids);
+    ssMB << mb;
+    strProof = HexStr(ssMB.begin(), ssMB.end());
+
+    return true;
+}
+
+bool VerifyTxOutProof(const std::string& strProof)
+{
+    CDataStream ssMB(ParseHex(strProof), SER_NETWORK, PROTOCOL_VERSION);
+    CMerkleBlock merkleBlock;
+    ssMB >> merkleBlock;
+
+    std::vector<uint256> vMatch;
+    std::vector<unsigned int> vIndex;
+    if (merkleBlock.txn.ExtractMatches(vMatch, vIndex) != merkleBlock.header.hashMerkleRoot)
+        return false;
+
+    LOCK(cs_main);
+
+    if (!mapBlockIndex.count(merkleBlock.header.GetHash()) || !chainActive.Contains(mapBlockIndex[merkleBlock.header.GetHash()]))
+        return false;
+
+    return true;
 }
 
 class CMainCleanup

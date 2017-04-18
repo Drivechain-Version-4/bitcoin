@@ -579,4 +579,10 @@ bool LoadMempool();
 /** Track sidechain WT^ workscores */
 extern SidechainDB scdb;
 
+/** Create txout proof */
+bool GetTxOutProof(const uint256& txid, const uint256& hashBlock, std::string& strProof);
+
+/** Verify txout proof */
+bool VerifyTxOutProof(const std::string& strProof);
+
 #endif // BITCOIN_VALIDATION_H
