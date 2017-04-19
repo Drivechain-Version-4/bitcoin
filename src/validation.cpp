@@ -14,6 +14,7 @@
 #include "consensus/validation.h"
 #include "hash.h"
 #include "init.h"
+#include "merkleblock.h"
 #include "policy/fees.h"
 #include "policy/policy.h"
 #include "pow.h"
