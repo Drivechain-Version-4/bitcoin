@@ -41,7 +41,7 @@ struct SidechainDeposit {
     bool operator==(const SidechainDeposit& a) const;
 };
 
-struct SidechainVerification {
+struct SidechainWTJoinState {
     uint8_t nSidechain;
     uint16_t nBlocksLeft;
     uint16_t nWorkScore;
@@ -49,6 +49,7 @@ struct SidechainVerification {
 
     std::string ToString() const;
 
+    // For hash calculation
     ADD_SERIALIZE_METHODS
 
     template <typename Stream, typename Operation>
