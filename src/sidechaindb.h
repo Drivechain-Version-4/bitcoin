@@ -14,7 +14,7 @@ class CTransaction;
 
 struct Sidechain;
 struct SidechainDeposit;
-struct SidechainVerification;
+struct SidechainWTJoinState;
 
 class SidechainDB
 {
@@ -50,7 +50,7 @@ public:
 
 private:
     /** Sidechain state database */
-    std::vector<std::vector<SidechainVerification>> SCDB;
+    std::vector<std::vector<SidechainWTJoinState>> SCDB;
 
     /** The DB vector stores verifications, which contain as one member
      *  the hash / txid of the WT^ being verified. This vector stores the
@@ -70,10 +70,10 @@ private:
     int GetLastTauHeight(const Sidechain &sidechain, int nHeight) const;
 
     /** Get the latest scores for nSidechain's WT^(s) */
-    std::vector<SidechainVerification> GetLastVerifications(uint8_t nSidechain) const;
+    std::vector<SidechainWTJoinState> GetLastVerifications(uint8_t nSidechain) const;
 
     /** Read state script and update SCDB */
-    bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainVerification>>& vScores, bool fJustCheck = false);
+    bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainWTJoinState>>& vScores, bool fJustCheck = false);
 };
 
 #endif // BITCOIN_SIDECHAINDB_H
