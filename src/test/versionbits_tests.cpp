@@ -7,7 +7,7 @@
 #include "test/test_bitcoin.h"
 #include "test/test_random.h"
 #include "chainparams.h"
-#include "main.h"
+#include "validation.h"
 #include "consensus/params.h"
 
 #include <boost/test/unit_test.hpp>
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(versionbits_computeblockversion)
         blocksToMine--;
         nTime += 600;
         nHeight += 1;
-    };
+    }
 
     nTime = nTimeout;
     // FAILED is only triggered at the end of a period, so CBV should be setting

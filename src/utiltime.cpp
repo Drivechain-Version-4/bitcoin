@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2015 The Bitcoin Core developers
+// Copyright (c) 2009-2016 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,8 +11,6 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
-
-using namespace std;
 
 static int64_t nMockTime = 0; //!< For unit testing
 
@@ -46,6 +44,11 @@ int64_t GetTimeMicros()
     return now;
 }
 
+int64_t GetSystemTimeInSeconds()
+{
+    return GetTimeMicros()/1000000;
+}
+
 /** Return a time useful for the debug log */
 int64_t GetLogTimeMicros()
 {
@@ -58,7 +61,7 @@ void MilliSleep(int64_t n)
 {
 
 /**
- * Boost's sleep_for was uninterruptable when backed by nanosleep from 1.50
+ * Boost's sleep_for was uninterruptible when backed by nanosleep from 1.50
  * until fixed in 1.52. Use the deprecated sleep method for the broken case.
  * See: https://svn.boost.org/trac/boost/ticket/7238
  */
