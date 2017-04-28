@@ -14,6 +14,7 @@
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
+#include "coinbasecache.h"
 #include "compat/sanity.h"
 #include "consensus/validation.h"
 #include "fs.h"
@@ -68,6 +69,7 @@
 #endif
 
 bool fFeeEstimatesInitialized = false;
+bool fCoinbaseCacheInitialized = false;
 static const bool DEFAULT_PROXYRANDOMIZE = true;
 static const bool DEFAULT_REST_ENABLE = false;
 static const bool DEFAULT_DISABLE_SAFEMODE = false;
@@ -98,6 +100,7 @@ enum BindFlags {
 };
 
 static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
+static const char* COINBASE_CACHE_FILENAME="coinbase_cache.dat";
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -220,6 +223,17 @@ void Shutdown()
         else
             LogPrintf("%s: Failed to write fee estimates to %s\n", __func__, est_path.string());
         fFeeEstimatesInitialized = false;
+    }
+
+    if (fCoinbaseCacheInitialized)
+    {
+        fs::path cbc_path = GetDataDir() / COINBASE_CACHE_FILENAME;
+        CAutoFile cbc_fileout(fsbridge::fopen(cbc_path, "wb"), SER_DISK, CLIENT_VERSION);
+        if (!cbc_fileout.IsNull())
+            ::coinbaseCache.Write(cbc_fileout);
+        else
+            LogPrintf("%s: Failed to write coinbase cache to %s\n", __func__, cbc_path.string());
+        fCoinbaseCacheInitialized = false;
     }
 
     {
@@ -1553,6 +1567,12 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (!est_filein.IsNull())
         ::feeEstimator.Read(est_filein);
     fFeeEstimatesInitialized = true;
+
+    fs::path cbc_path = GetDataDir() / COINBASE_CACHE_FILENAME;
+    CAutoFile cbc_filein(fsbridge::fopen(cbc_path, "rb"), SER_DISK, CLIENT_VERSION);
+    if (!cbc_filein.IsNull())
+        ::coinbaseCache.Read(cbc_filein);
+    fCoinbaseCacheInitialized = true;
 
     // ********************************************************* Step 8: load wallet
 #ifdef ENABLE_WALLET
