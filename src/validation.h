@@ -563,4 +563,7 @@ void DumpMempool();
 /** Load the mempool from disk. */
 bool LoadMempool();
 
+/** Remove extra coinbases from chainActive */
+void PruneCoinbaseCache();
+
 #endif // BITCOIN_VALIDATION_H
