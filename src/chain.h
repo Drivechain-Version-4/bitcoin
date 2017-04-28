@@ -8,6 +8,7 @@
 
 #include "arith_uint256.h"
 #include "primitives/block.h"
+#include "primitives/transaction.h"
 #include "pow.h"
 #include "tinyformat.h"
 #include "uint256.h"
@@ -27,6 +28,24 @@ static const int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
  * MAX_FUTURE_BLOCK_TIME.
  */
 static const int64_t TIMESTAMP_WINDOW = MAX_FUTURE_BLOCK_TIME;
+
+//! Number of coinbases chainActive has cached
+extern int nCoinbaseCached;
+
+/** Target size limit of coinbase cache */
+static const int COINBASE_CACHE_TARGET = 2600;
+
+/**
+ * How many blocks to wait between pruning.
+ * Set to 1 to prune the coinbase cache as soon as 1 block over
+ * COINBASE_CACHE_TARGET is added.
+ * Setting to a higher number of blocks will reduce calls to
+ * PruneCoinbaseCache().
+ */
+static const int COINBASE_CACHE_PRUNE_FREQUENCY = 50;
+
+/** Block height to begin caching coinbases (BMM activation height) */
+static const int COINBASE_CACHE_HEIGHT = 0;
 
 class CBlockFileInfo
 {
@@ -219,6 +238,12 @@ public:
     //! (memory only) Maximum nTime in the chain upto and including this block.
     unsigned int nTimeMax;
 
+    //! Should a coinbase be cached for this block?
+    bool fCoinbase;
+
+    //! Cached coinbase for this block
+    CTransactionRef coinbase;
+
     void SetNull()
     {
         phashBlock = NULL;
@@ -240,6 +265,9 @@ public:
         nTime          = 0;
         nBits          = 0;
         nNonce         = 0;
+
+        fCoinbase = false;
+        coinbase = NULL;
     }
 
     CBlockIndex()
@@ -402,6 +430,18 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+
+        // BMM
+        READWRITE(fCoinbase);
+        if (fCoinbase)
+            READWRITE(coinbase);
+        else
+        if (coinbase && !ser_action.ForRead()) {
+            // TODO improve
+            // Reduce size on disk by replacing coinbase with blank tx
+            CTransactionRef tx = MakeTransactionRef(CTransaction());
+            READWRITE(tx);
+        }
     }
 
     uint256 GetBlockHash() const
