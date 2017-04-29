@@ -15,28 +15,11 @@
 #include "transactiontablemodel.h"
 #include "walletmodel.h"
 
-// For testing only, very bad
-#include "core_io.h"
-#include "consensus/validation.h"
-#include "net.h"
-#include "primitives/transaction.h"
-#include "sidechaindb.h"
-#include "validation.h"
-#include "wallet/wallet.h"
-
 #include <QAbstractItemDelegate>
 #include <QPainter>
 
 #define DECORATION_SIZE 54
 #define NUM_ITEMS 5
-
-// miUUfsigq8Eqby27YmmVYmspYrQAcGvDk9
-// cMohcapKPRc5BGNqPkxLBoB6fLxXRbWRP7qTaa8LDdHigjvUYJc1
-static const std::string testkey1 = "a47d5954bdd726e48557efece64962d67b7c7020";
-
-// moi1nVJDdf6d9GccqL5xNtFrcFz9HxzpVv
-// cPANHz2y5SuAHt8q6UfLmqexphikWZFg3JWJowABZTknKScgwAcS
-static const std::string testkey2 = "ca66e7d4640b10601db099b253bd7454d07ed859";
 
 class TxViewDelegate : public QAbstractItemDelegate
 {
