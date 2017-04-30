@@ -579,6 +579,9 @@ bool LoadMempool();
 /** Track sidechain WT^ workscores */
 extern SidechainDB scdb;
 
+/** Remove extra coinbase(s) from chainActive */
+void PruneCoinbaseCache();
+
 /** Create txout proof */
 bool GetTxOutProof(const uint256& txid, const uint256& hashBlock, std::string& strProof);
 

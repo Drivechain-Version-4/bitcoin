@@ -2795,6 +2795,16 @@ bool ReceivedBlockTransactions(const CBlock &block, CValidationState& state, CBl
     if (IsWitnessEnabled(pindexNew->pprev, Params().GetConsensus())) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
+
+    if (chainActive.Height() >= COINBASE_CACHE_HEIGHT) {
+        pindexNew->fCoinbase = true;
+        pindexNew->coinbase = block.vtx[0];
+        nCoinbaseCached++;
+
+        if (nCoinbaseCached >= COINBASE_CACHE_TARGET + COINBASE_CACHE_PRUNE_DELAY)
+            PruneCoinbaseCache();
+    }
+
     pindexNew->RaiseValidity(BLOCK_VALID_TRANSACTIONS);
     setDirtyBlockIndex.insert(pindexNew);
 
@@ -4376,6 +4386,27 @@ void DumpMempool(void)
         LogPrintf("Dumped mempool: %gs to copy, %gs to dump\n", (mid-start)*0.000001, (last-mid)*0.000001);
     } catch (const std::exception& e) {
         LogPrintf("Failed to dump mempool: %s. Continuing anyway.\n", e.what());
+    }
+}
+
+void PruneCoinbaseCache()
+{
+    if (nCoinbaseCached <= COINBASE_CACHE_TARGET)
+        return;
+
+    int nHeight = chainActive.Height() + 1;
+    int nPruneBegin = nHeight - nCoinbaseCached;
+    int nPruneEnd = nPruneBegin + (nCoinbaseCached - COINBASE_CACHE_TARGET);
+    if (nPruneBegin < 0)
+        return;
+
+    for (int i = nPruneBegin; i <= nPruneEnd; i++) {
+        // Block index no longer caches coinbase
+        if (chainActive[i]->fCoinbase)
+            chainActive[i]->fCoinbase = false;
+
+        setDirtyBlockIndex.insert(chainActive[i]);
+        nCoinbaseCached--;
     }
 }
 
