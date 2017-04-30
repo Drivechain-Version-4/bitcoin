@@ -1941,6 +1941,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     std::vector<PrecomputedTransactionData> txdata;
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
+    std::vector<CTransaction> vDepositTx;
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
@@ -2003,12 +2004,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     fSidechainOutput = true;
             }
             if (fSidechainOutput)
-                scdb.AddDeposit(tx);
-        }
-        else
-        if (!fJustCheck && tx.IsCoinBase()) {
-            // Check for SCDB state updates
-            scdb.Update(tx);
+                vDepositTx.push_back(tx);
         }
 
         CTxUndo undoDummy;
@@ -2063,6 +2059,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
     // add this block to the view's block chain
     view.SetBestBlock(pindex->GetBlockHash());
+
+    if (vDepositTx.size())
+        scdb.AddDeposits(vDepositTx);
 
     int64_t nTime5 = GetTimeMicros(); nTimeIndex += nTime5 - nTime4;
     LogPrint("bench", "    - Index writing: %.2fms [%.2fs]\n", 0.001 * (nTime5 - nTime4), nTimeIndex * 0.000001);
