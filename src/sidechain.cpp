@@ -39,6 +39,11 @@ std::string Sidechain::GetSidechainName() const
     return "SIDECHAIN_UNKNOWN";
 }
 
+uint16_t Sidechain::GetTau() const
+{
+    return nWaitPeriod + nVerificationPeriod;
+}
+
 bool SidechainDeposit::operator==(const SidechainDeposit& a) const
 {
     return (a.nSidechain == nSidechain &&

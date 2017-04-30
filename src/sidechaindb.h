@@ -22,7 +22,7 @@ public:
     SidechainDB();
 
     /** Add deposit to cache */
-    void AddDeposit(const CTransaction& tx);
+    void AddDeposits(const std::vector<CTransaction>& vtx);
 
     /** Add a new WT^ to the database */
     bool AddWTJoin(uint8_t nSidechain, const CTransaction& tx);
@@ -33,8 +33,11 @@ public:
     /** Return true if the full WT^ CTransaction is cached */
     bool HaveWTJoinCached(uint256 wtxid) const;
 
-    /** Update DB state with new state script */
+    /** Look for state update scripts in coinbase transaction */
     bool Update(const CTransaction& tx);
+
+    /** Update the DB state (public for unit tests) */
+    bool Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck = false);
 
     /** Return vector of deposits this tau for nSidechain. */
     std::vector<SidechainDeposit> GetDeposits(uint8_t nSidechain) const;
@@ -48,6 +51,12 @@ public:
     /** Return serialization hash of SCDB latest verification(s) */
     uint256 CreateSCDBHash() const;
 
+    /** Check SCDB WT^ verification status */
+    bool CheckWorkScore(const uint8_t& nSidechain, const uint256& wtxid) const;
+
+    /** Print SCDB WT^ verification status */
+    std::string ToString() const;
+
 private:
     /** Sidechain state database */
     std::vector<std::vector<SidechainWTJoinState>> SCDB;
@@ -60,9 +69,6 @@ private:
     /** Track deposits created during this tau */
     std::vector<SidechainDeposit> vDepositCache;
 
-    /** Update the DB state */
-    bool Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck = false);
-
     /** Is there anything being tracked by the SCDB? */
     bool HasState() const;
 
@@ -70,7 +76,7 @@ private:
     int GetLastTauHeight(const Sidechain &sidechain, int nHeight) const;
 
     /** Get the latest scores for nSidechain's WT^(s) */
-    std::vector<SidechainWTJoinState> GetLastVerifications(uint8_t nSidechain) const;
+    std::vector<SidechainWTJoinState> GetState(uint8_t nSidechain) const;
 
     /** Read state script and update SCDB */
     bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainWTJoinState>>& vScores, bool fJustCheck = false);

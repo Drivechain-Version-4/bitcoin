@@ -576,7 +576,7 @@ void DumpMempool();
 /** Load the mempool from disk. */
 bool LoadMempool();
 
-/** Track sidechain WT^ workscores */
+/** Tracks validation status of sidechain WT^(s) */
 extern SidechainDB scdb;
 
 /** Remove extra coinbase(s) from chainActive */
