@@ -39,6 +39,9 @@ public:
     /** Update the DB state (public for unit tests) */
     bool Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck = false);
 
+    /** Get status of nSidechain's WT^(s) (public for unit tests) */
+    std::vector<SidechainWTJoinState> GetState(uint8_t nSidechain) const;
+
     /** Return vector of deposits this tau for nSidechain. */
     std::vector<SidechainDeposit> GetDeposits(uint8_t nSidechain) const;
 
@@ -57,6 +60,8 @@ public:
     /** Print SCDB WT^ verification status */
     std::string ToString() const;
 
+    bool Sync(int nHeight);
+
 private:
     /** Sidechain state database */
     std::vector<std::vector<SidechainWTJoinState>> SCDB;
@@ -72,11 +77,8 @@ private:
     /** Is there anything being tracked by the SCDB? */
     bool HasState() const;
 
-    /** Return height of the end of the previous / begining of this tau */
+    /** Return height of the end of the previous / beginning of this tau */
     int GetLastTauHeight(const Sidechain &sidechain, int nHeight) const;
-
-    /** Get the latest scores for nSidechain's WT^(s) */
-    std::vector<SidechainWTJoinState> GetState(uint8_t nSidechain) const;
 
     /** Read state script and update SCDB */
     bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainWTJoinState>>& vScores, bool fJustCheck = false);
