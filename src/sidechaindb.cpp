@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Bitcoin Core developers
+﻿// Copyright (c) 2017 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -234,7 +234,7 @@ CScript SidechainDB::CreateStateScript(int nHeight) const
     // Collect scores that need updating
     std::vector<std::vector<SidechainWTJoinState>> vScores;
     for (const Sidechain& s : ValidSidechains) {
-        const std::vector<SidechainWTJoinState>& vState = GetState(s.nSidechain);
+        const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
         vScores.push_back(vState);
     }
 
@@ -338,7 +338,7 @@ bool SidechainDB::Update(const CTransaction& tx)
     // Collect scores that need updating
     std::vector<std::vector<SidechainWTJoinState>> vScores;
     for (const Sidechain& s : ValidSidechains) {
-        const std::vector<SidechainWTJoinState>& vState = GetState(s.nSidechain);
+        const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
         vScores.push_back(vState);
     }
 
@@ -363,6 +363,31 @@ bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, 
 
     if (!fJustCheck)
         SCDB[nSidechain].push_back(v);
+    return true;
+}
+
+bool SidechainDB::Sync(int nHeight)
+{
+    //
+    // Temporary hack solution,
+    // TODO rewrite update / apply state functions
+    // so that there are two functions readcoinbase and
+    // update.
+    //
+    // readcoinbase will handle finding a state script,
+    // and making sure that the state script itself is readable.
+    //
+    // update should handle the rules, as it will actually apply the updates.
+    //
+    // SyncSCDB can be called whenever a new tip is connected,
+    // to clear out old state data if need be.
+    //
+    for (const Sidechain& s : ValidSidechains) {
+        // If this is the beginning of a new Tau
+        if ((nHeight - 1) % s.GetTau() == 0) {
+            SCDB[s.nSidechain].clear();
+        }
+    }
     return true;
 }
 
@@ -412,7 +437,7 @@ std::vector<SidechainWTJoinState> SidechainDB::GetState(uint8_t nSidechain) cons
             if (it->second.nWorkScore < v.nWorkScore)
                 it->second = v;
         } else {
-            // Add latest verification for undiscoverd WT^
+            // Add latest verification for undiscovered WT^
             mapScores[v.wtxid] = v;
             vLastVerification.push_back(v);
         }
@@ -516,4 +541,3 @@ std::string SidechainDB::ToString() const
     }
     return str;
 }
-

@@ -12,7 +12,7 @@ bool SidechainNumberValid(uint8_t nSidechain)
     if (!(nSidechain < ARRAYLEN(ValidSidechains)))
         return false;
 
-    // Check that number coresponds to a valid sidechain
+    // Check that number corresponds to a valid sidechain
     switch (nSidechain) {
     case SIDECHAIN_TEST:
     case SIDECHAIN_HIVEMIND:
@@ -25,7 +25,7 @@ bool SidechainNumberValid(uint8_t nSidechain)
 
 std::string Sidechain::GetSidechainName() const
 {
-    // Check that number coresponds to a valid sidechain
+    // Check that number corresponds to a valid sidechain
     switch (nSidechain) {
     case SIDECHAIN_TEST:
         return "SIDECHAIN_TEST";

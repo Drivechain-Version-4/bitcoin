@@ -22,9 +22,7 @@
 //! KeyID for testing
 // mx3PT9t2kzCFgAURR9HeK6B5wN8egReUxY
 // cN5CqwXiaNWhNhx3oBQtA8iLjThSKxyZjfmieTsyMpG6NnHBzR7J
-static const std::string testkey = "b5437dc6a4e5da5597548cf87db009237d286636";
-
-BOOST_FIXTURE_TEST_SUITE(sidechaindb_tests, TestChain100Setup)
+static const std::string testKey = "b5437dc6a4e5da5597548cf87db009237d286636";
 
 std::vector<CMutableTransaction> CreateDepositTransactions(SidechainNumber nSidechain, int count)
 {
@@ -36,10 +34,12 @@ std::vector<CMutableTransaction> CreateDepositTransactions(SidechainNumber nSide
 
         depositTransactions[i].vout.resize(1);
         depositTransactions[i].vout[0].nValue = rand*CENT;
-        depositTransactions[i].vout[0].scriptPubKey = CScript() << nSidechain << ToByteVector(testkey) << OP_NOP4;
+        depositTransactions[i].vout[0].scriptPubKey = CScript() << OP_RETURN << nSidechain << ToByteVector(testKey);
     }
     return depositTransactions;
 }
+
+BOOST_FIXTURE_TEST_SUITE(sidechaindb_tests, TestChain100Setup)
 
 BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
 {
@@ -54,25 +54,25 @@ BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
     const Sidechain& hivemind = ValidSidechains[SIDECHAIN_HIVEMIND];
     const Sidechain& wimble = ValidSidechains[SIDECHAIN_WIMBLE];
 
-    int blocksLeft0 = test.GetTau();
-    int blocksLeft1 = hivemind.GetTau();
-    int blocksLeft2 = wimble.GetTau();
+    int nBlocksLeft0 = test.GetTau();
+    int nBlocksLeft1 = hivemind.GetTau();
+    int nBlocksLeft2 = wimble.GetTau();
 
-    int score0, score1;
-    score0 = score1 = 0;
-    for (int i = 0; i <= 300; i++) {
-        scdb.Update(SIDECHAIN_TEST, blocksLeft0, score0, vTestDeposit[0].GetHash());
-        scdb.Update(SIDECHAIN_HIVEMIND, blocksLeft1, score1, vHivemindDeposit[0].GetHash());
-        scdb.Update(SIDECHAIN_WIMBLE, blocksLeft2, 0, vWimbleDeposit[0].GetHash());
+    int nScore0, nScore1;
+    nScore0 = nScore1 = 0;
+    for (int i = 0; i <= test.GetTau(); i++) {
+        scdb.Update(SIDECHAIN_TEST, nBlocksLeft0, nScore0, vTestDeposit[0].GetHash());
+        scdb.Update(SIDECHAIN_HIVEMIND, nBlocksLeft1, nScore1, vHivemindDeposit[0].GetHash());
+        scdb.Update(SIDECHAIN_WIMBLE, nBlocksLeft2, 0, vWimbleDeposit[0].GetHash());
 
-        score0++;
+        nScore0++;
 
         if (i % 2 == 0)
-            score1++;
+            nScore1++;
 
-        blocksLeft0--;
-        blocksLeft1--;
-        blocksLeft2--;
+        nBlocksLeft0--;
+        nBlocksLeft1--;
+        nBlocksLeft2--;
     }
 
     // WT^ 0 should pass with valid workscore (300/100)
@@ -81,6 +81,57 @@ BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
     BOOST_CHECK(!scdb.CheckWorkScore(SIDECHAIN_HIVEMIND, vHivemindDeposit[0].GetHash()));
     // WT^ 2 should fail with unsatisfied workscore (0/200)
     BOOST_CHECK(!scdb.CheckWorkScore(SIDECHAIN_WIMBLE, vWimbleDeposit[0].GetHash()));
+}
+
+BOOST_AUTO_TEST_CASE(sidechaindb_MultipleTauPeriods)
+{
+    // Test SCDB with multiple tau periods,
+    // approve multiple WT^s on the same sidechain.
+    SidechainDB scdb;
+    const Sidechain& test = ValidSidechains[SIDECHAIN_TEST];
+
+    // Create two transactions to use as WT^s
+    std::vector<CMutableTransaction> vTestDeposit = CreateDepositTransactions(SIDECHAIN_TEST, 2);
+
+    // Verify first transaction, check work score
+    int nBlocksLeft = test.GetTau();
+    int nScore = 0;
+    for (int i = 0; i < test.GetTau(); i++) {
+        scdb.Update(SIDECHAIN_TEST, nBlocksLeft, nScore, vTestDeposit[0].GetHash());
+        nBlocksLeft--;
+        nScore++;
+    }
+    BOOST_CHECK(scdb.CheckWorkScore(SIDECHAIN_TEST, vTestDeposit[0].GetHash()));
+
+    // Call Sync() on SCDB to clear out old state data
+    scdb.Sync(test.GetTau() + 1);
+
+    // Partially verify second transaction
+    nBlocksLeft = test.GetTau();
+    nScore = 0;
+    for (int i = 0; i < (test.GetTau() - test.nVerificationPeriod); i++) {
+        scdb.Update(SIDECHAIN_TEST, nBlocksLeft, nScore, vTestDeposit[1].GetHash());
+        nBlocksLeft--;
+        nScore++;
+    }
+    // Work score should be insufficient
+    BOOST_CHECK(!scdb.CheckWorkScore(SIDECHAIN_TEST, vTestDeposit[1].GetHash()));
+
+    // Verify that DB has updated to correct WT^
+    const std::vector<SidechainWTJoinState> vState = scdb.GetState(SIDECHAIN_TEST);
+    BOOST_CHECK(vState.size() == 1);
+
+    for (const SidechainWTJoinState& state : vState)
+        BOOST_CHECK(state.wtxid == vTestDeposit[1].GetHash());
+
+    // Finish verifying second transaction
+    for (int i = 0; i < (test.GetTau() - test.nWaitPeriod); i++) {
+        scdb.Update(SIDECHAIN_TEST, nBlocksLeft, nScore, vTestDeposit[1].GetHash());
+        nBlocksLeft--;
+        nScore++;
+    }
+    // Check work score, should pass now
+    BOOST_CHECK(scdb.CheckWorkScore(SIDECHAIN_TEST, vTestDeposit[1].GetHash()));
 }
 
 BOOST_AUTO_TEST_CASE(sidechaindb_EmptyStateScript)
