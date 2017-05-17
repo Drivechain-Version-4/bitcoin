@@ -21,6 +21,8 @@ static const char* const SIDECHAIN_TEST_SCRIPT_HEX = "76a914497f7d6b59281591c50b
 //! Max number of WT^(s) per sidechain during tau
 static const int SIDECHAIN_MAX_WT = 3;
 
+static const int SIDECHAIN_MAX_LD = 2600;
+
 struct Sidechain {
     uint8_t nSidechain;
     uint16_t nWaitPeriod;
@@ -30,6 +32,8 @@ struct Sidechain {
     std::string ToString() const;
     std::string GetSidechainName() const;
     uint16_t GetTau() const;
+    // Return height of the end of previous / beginning of current tau
+    int GetLastTauHeight(int nHeight) const;
 };
 
 struct SidechainDeposit {
@@ -71,8 +75,8 @@ static const Sidechain ValidSidechains[] =
 {
     // {nSidechain, nWaitPeriod, nVerificationPeriod, nMinWorkScore}
     {SIDECHAIN_TEST, 100, 200, 100},
-    {SIDECHAIN_HIVEMIND, 200, 400, 200},
-    {SIDECHAIN_WIMBLE, 200, 400, 200},
+    {SIDECHAIN_HIVEMIND, 100, 200, 100},
+    {SIDECHAIN_WIMBLE, 100, 200, 100},
 };
 
 bool SidechainNumberValid(uint8_t nSidechain);

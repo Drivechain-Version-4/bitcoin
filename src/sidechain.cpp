@@ -44,6 +44,19 @@ uint16_t Sidechain::GetTau() const
     return nWaitPeriod + nVerificationPeriod;
 }
 
+int Sidechain::GetLastTauHeight(int nHeight) const
+{
+    uint16_t nTau = GetTau();
+    for (;;) {
+        if (nHeight < 0)
+            return -1;
+        if (nHeight % nTau == 0 || nHeight == 0)
+            break;
+        nHeight--;
+    }
+    return nHeight;
+}
+
 bool SidechainDeposit::operator==(const SidechainDeposit& a) const
 {
     return (a.nSidechain == nSidechain &&

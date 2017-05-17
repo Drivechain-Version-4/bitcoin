@@ -60,10 +60,10 @@ BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
 
     int nScore0, nScore1;
     nScore0 = nScore1 = 0;
-    for (int i = 0; i <= test.GetTau(); i++) {
-        scdb.Update(SIDECHAIN_TEST, nBlocksLeft0, nScore0, vTestDeposit[0].GetHash());
-        scdb.Update(SIDECHAIN_HIVEMIND, nBlocksLeft1, nScore1, vHivemindDeposit[0].GetHash());
-        scdb.Update(SIDECHAIN_WIMBLE, nBlocksLeft2, 0, vWimbleDeposit[0].GetHash());
+    for (int i = 0; i <= 100; i++) {
+        scdb.Update(SIDECHAIN_TEST, test.GetTau() - i, nScore0, vTestDeposit[0].GetHash());
+        scdb.Update(SIDECHAIN_HIVEMIND, hivemind.GetTau() - i, nScore1, vHivemindDeposit[0].GetHash());
+        scdb.Update(SIDECHAIN_WIMBLE, wimble.GetTau() - i, 0, vWimbleDeposit[0].GetHash());
 
         nScore0++;
 
@@ -75,11 +75,11 @@ BOOST_AUTO_TEST_CASE(sidechaindb_isolated)
         nBlocksLeft2--;
     }
 
-    // WT^ 0 should pass with valid workscore (300/100)
+    // WT^ 0 should pass with valid workscore (100/100)
     BOOST_CHECK(scdb.CheckWorkScore(SIDECHAIN_TEST, vTestDeposit[0].GetHash()));
-    // WT^ 1 should fail with unsatisfied workscore (150/200)
+    // WT^ 1 should fail with unsatisfied workscore (50/100)
     BOOST_CHECK(!scdb.CheckWorkScore(SIDECHAIN_HIVEMIND, vHivemindDeposit[0].GetHash()));
-    // WT^ 2 should fail with unsatisfied workscore (0/200)
+    // WT^ 2 should fail with unsatisfied workscore (0/100)
     BOOST_CHECK(!scdb.CheckWorkScore(SIDECHAIN_WIMBLE, vWimbleDeposit[0].GetHash()));
 }
 
@@ -103,8 +103,8 @@ BOOST_AUTO_TEST_CASE(sidechaindb_MultipleTauPeriods)
     }
     BOOST_CHECK(scdb.CheckWorkScore(SIDECHAIN_TEST, vTestDeposit[0].GetHash()));
 
-    // Call Sync() on SCDB to clear out old state data
-    scdb.Sync(test.GetTau() + 1);
+    // Update SCDB, clear old state data
+    scdb.Update(test.GetTau(), uint256(), MakeTransactionRef(vTestDeposit[0]));
 
     // Partially verify second transaction
     nBlocksLeft = test.GetTau();
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(sidechaindb_FullStateScript)
     scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight, 1, vWimbleDeposit[0].GetHash());
     scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight - 1, 0, vWimbleDeposit[1].GetHash());
     scdbFull.Update(SIDECHAIN_WIMBLE, nVoteHeight - 2, 0, vWimbleDeposit[2].GetHash());
-    BOOST_CHECK(scriptFullExpected == scdbFull.CreateStateScript(sidechainTest.GetTau() - 1));
+    BOOST_CHECK(scriptFullExpected == scdbFull.CreateStateScript(sidechainWimble.GetTau() - 1));
 }
 
 BOOST_AUTO_TEST_CASE(sidechaindb_CountStateScript)
@@ -325,7 +325,7 @@ BOOST_AUTO_TEST_CASE(sidechaindb_PositionStateScript)
     scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight, 0, vWimbleDeposit[0].GetHash());
     scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight - 1, 0, vWimbleDeposit[1].GetHash());
     scdbPosition.Update(SIDECHAIN_WIMBLE, nVoteHeight - 2, 1, vWimbleDeposit[2].GetHash());
-    BOOST_CHECK(scriptWTPositionExpected == scdbPosition.CreateStateScript(sidechainTest.GetTau() - 1));
+    BOOST_CHECK(scriptWTPositionExpected == scdbPosition.CreateStateScript(sidechainWimble.GetTau() - 1));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

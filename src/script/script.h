@@ -169,7 +169,8 @@ enum opcodetype
     OP_NOP2 = OP_CHECKLOCKTIMEVERIFY,
     OP_CHECKSEQUENCEVERIFY = 0xb2,
     OP_NOP3 = OP_CHECKSEQUENCEVERIFY,
-    OP_NOP4 = 0xb3,
+    OP_BRIBE = 0xb3,
+    OP_NOP4 = OP_BRIBE,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
     OP_NOP7 = 0xb6,
@@ -205,7 +206,7 @@ enum scopcodetype {
     SCOP_SC_DELIM = 0x56,
 };
 
-const char* GetSCOPName(opcodetype opcode);
+const char* GetSCOPName(scopcodetype sopcode);
 
 class scriptnum_error : public std::runtime_error
 {
@@ -658,6 +659,7 @@ public:
     bool IsPayToScriptHash() const;
     bool IsPayToWitnessScriptHash() const;
     bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
+    bool IsBribe() const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;

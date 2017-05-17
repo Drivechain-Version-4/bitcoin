@@ -5,12 +5,14 @@
 #ifndef BITCOIN_SIDECHAINDB_H
 #define BITCOIN_SIDECHAINDB_H
 
-#include "uint256.h"
+#include "primitives/transaction.h"
 
+#include <map>
+#include <queue>
 #include <vector>
 
 class CScript;
-class CTransaction;
+class uint256;
 
 struct Sidechain;
 struct SidechainDeposit;
@@ -31,13 +33,7 @@ public:
     bool HaveDepositCached(const SidechainDeposit& deposit) const;
 
     /** Return true if the full WT^ CTransaction is cached */
-    bool HaveWTJoinCached(uint256 wtxid) const;
-
-    /** Look for state update scripts in coinbase transaction */
-    bool Update(const CTransaction& tx);
-
-    /** Update the DB state (public for unit tests) */
-    bool Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck = false);
+    bool HaveWTJoinCached(const uint256& wtxid) const;
 
     /** Get status of nSidechain's WT^(s) (public for unit tests) */
     std::vector<SidechainWTJoinState> GetState(uint8_t nSidechain) const;
@@ -60,28 +56,52 @@ public:
     /** Print SCDB WT^ verification status */
     std::string ToString() const;
 
-    bool Sync(int nHeight);
+    /**
+     * Update the DB state. This function is the only function that
+     * updates the SCDB state during normal operation. The update
+     * overload exists to facilitate testing.
+     */
+    bool Update(int nHeight, const uint256& hashBlock, const CTransactionRef& coinbase);
+
+    /** Update the DB state (public for unit tests) */
+    bool Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, uint256 wtxid, bool fJustCheck = false);
+
+    /** Return the hash of the last block SCDB processed */
+    uint256 GetHashBlockLastSeen();
+
+    std::multimap<uint256, int> GetLinkingData() const;
 
 private:
     /** Sidechain state database */
     std::vector<std::vector<SidechainWTJoinState>> SCDB;
 
-    /** The DB vector stores verifications, which contain as one member
-     *  the hash / txid of the WT^ being verified. This vector stores the
-     *  full transaction(s) so that they can be looked up as needed */
+    /** Cache of potential WT^ transactions */
     std::vector<CTransaction> vWTJoinCache;
 
     /** Track deposits created during this tau */
     std::vector<SidechainDeposit> vDepositCache;
 
+    std::multimap<uint256, int> mapBMMLD;
+    std::queue<uint256> queueBMMLD;
+
+    /** The most recent block that SCDB has processed */
+    uint256 hashBlockLastSeen;
+
     /** Is there anything being tracked by the SCDB? */
     bool HasState() const;
 
-    /** Return height of the end of the previous / beginning of this tau */
-    int GetLastTauHeight(const Sidechain &sidechain, int nHeight) const;
+    /** Try to read state from a coinbase and apply it if valid */
+    bool ReadStateScript(const CTransactionRef &coinbase);
 
-    /** Read state script and update SCDB */
-    bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainWTJoinState>>& vScores, bool fJustCheck = false);
+    /** Apply the results of ReadStateScript() to SCDB */
+    bool ApplyStateScript(const CScript& state, const std::vector<std::vector<SidechainWTJoinState>>& vState, bool fJustCheck = false);
+
+    /**
+     * Submit default state update vote for all sidechains.
+     * Used when either the miner of a block does not include a state
+     * script, or the state script is invalid.
+     */
+    bool ApplyDefaultUpdate();
 };
 
 #endif // BITCOIN_SIDECHAINDB_H
