@@ -7,14 +7,12 @@
 #include "base58.h"
 #include "chain.h"
 #include "core_io.h"
-#include "primitives/transaction.h"
 #include "script/script.h"
 #include "sidechain.h"
 #include "uint256.h"
+#include "util.h"
 #include "utilstrencodings.h"
 #include "wallet/wallet.h"
-
-#include <map>
 
 SidechainDB::SidechainDB()
 {
@@ -93,7 +91,7 @@ bool SidechainDB::HaveDepositCached(const SidechainDeposit &deposit) const
     return false;
 }
 
-bool SidechainDB::HaveWTJoinCached(uint256 wtxid) const
+bool SidechainDB::HaveWTJoinCached(const uint256& wtxid) const
 {
     for (const CTransaction& tx : vWTJoinCache) {
         if (tx.GetHash() == wtxid)
@@ -251,8 +249,7 @@ CScript SidechainDB::CreateStateScript(int nHeight) const
         for (size_t y = 0; y < vScores[x].size(); y++) {
             const Sidechain& s = ValidSidechains[x];
             const SidechainWTJoinState& v = vScores[x][y];
-
-            int nTauLast = GetLastTauHeight(s, nHeight);
+            int nTauLast = s.GetLastTauHeight(nHeight);
             if (nHeight - nTauLast >= s.nWaitPeriod) {
                 // Update state during verification period
                 if (v.wtxid == mostVerified.wtxid)
@@ -286,7 +283,7 @@ uint256 SidechainDB::CreateSCDBHash() const
     return ss.GetHash();
 }
 
-bool SidechainDB::Update(const CTransaction& tx)
+bool SidechainDB::ReadStateScript(const CTransactionRef& coinbase)
 {
     /*
      * Only one state script of the current version is valid.
@@ -296,13 +293,16 @@ bool SidechainDB::Update(const CTransaction& tx)
      * ignore vote will be cast. If there isn't a state update in
      * the transaction outputs, a default ignore vote will be cast.
      */
+    if (!coinbase || coinbase->IsNull())
+        return false;
+
     if (!HasState())
         return false;
 
     // Collect potentially valid state scripts
     std::vector<CScript> vStateScript;
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        const CScript& scriptPubKey = tx.vout[i].scriptPubKey;
+    for (size_t i = 0; i < coinbase->vout.size(); i++) {
+        const CScript& scriptPubKey = coinbase->vout[i].scriptPubKey;
         if (scriptPubKey.size() < 3)
             continue;
         // State script begins with OP_RETURN
@@ -315,37 +315,24 @@ bool SidechainDB::Update(const CTransaction& tx)
     }
 
     // First case: Invalid update. Ignore state script, cast all ignore votes
-    if (vStateScript.size() != 1) {
-        // Collect WT^(s) that need to be updated
-        std::vector<SidechainWTJoinState> vNeedUpdate;
-        for (const Sidechain& s : ValidSidechains) {
-            const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
-            for (const SidechainWTJoinState& state : vState)
-                vNeedUpdate.push_back(state);
-        }
-
-        // Check that the updates can be applied
-        for (const SidechainWTJoinState& v : vNeedUpdate) {
-            if (!Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid, true))
-                return false;
-        }
-        // Apply the updates
-        for (const SidechainWTJoinState& v : vNeedUpdate)
-            Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid);
-        return true;
-    }
-
-    // Collect scores that need updating
-    std::vector<std::vector<SidechainWTJoinState>> vScores;
-    for (const Sidechain& s : ValidSidechains) {
-        const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
-        vScores.push_back(vState);
-    }
+    if (vStateScript.size() != 1)
+        return ApplyDefaultUpdate();
 
     // Second case: potentially valid update script, attempt to update SCDB
+    // Collect and combine the status of all sidechain WT^(s)
+    std::vector<std::vector<SidechainWTJoinState>> vStateAll;
+    for (const Sidechain& s : ValidSidechains) {
+        const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
+        vStateAll.push_back(vState);
+    }
+
     const CScript& state = vStateScript.front();
-    if (ApplyStateScript(state, vScores, true))
-        return ApplyStateScript(state, vScores);
+    if (ApplyStateScript(state, vStateAll, true))
+        return ApplyStateScript(state, vStateAll);
+
+    // Invalid or no update script, apply default
+    if (!ApplyDefaultUpdate())
+        LogPrintf("SidechainDB::ReadStateScript: Invalid update & failed to apply default update!\n");
 
     return false;
 }
@@ -363,32 +350,70 @@ bool SidechainDB::Update(uint8_t nSidechain, uint16_t nBlocks, uint16_t nScore, 
 
     if (!fJustCheck)
         SCDB[nSidechain].push_back(v);
+
     return true;
 }
 
-bool SidechainDB::Sync(int nHeight)
+bool SidechainDB::Update(int nHeight, const uint256& hashBlock, const CTransactionRef& coinbase)
 {
-    //
-    // Temporary hack solution,
-    // TODO rewrite update / apply state functions
-    // so that there are two functions readcoinbase and
-    // update.
-    //
-    // readcoinbase will handle finding a state script,
-    // and making sure that the state script itself is readable.
-    //
-    // update should handle the rules, as it will actually apply the updates.
-    //
-    // SyncSCDB can be called whenever a new tip is connected,
-    // to clear out old state data if need be.
-    //
-    for (const Sidechain& s : ValidSidechains) {
-        // If this is the beginning of a new Tau
-        if ((nHeight - 1) % s.GetTau() == 0) {
+    if (!coinbase || coinbase->IsNull())
+        return false;
+    // If a sidechain's tau period ended, reset WT^ verification status
+    for (const Sidechain& s : ValidSidechains)
+        if (nHeight > 0 && (nHeight % s.GetTau()) == 0)
             SCDB[s.nSidechain].clear();
+
+    // Apply state script
+    if (!ReadStateScript(coinbase))
+        LogPrintf("SidechainDB::Update: failed to read state script\n");
+
+    // Scan for h*(s) in coinbase outputs
+    for (const CTxOut& out : coinbase->vout) {
+        const CScript& scriptPubKey = out.scriptPubKey;
+
+        // Must at least contain the h*
+        if (scriptPubKey.size() < sizeof(uint256))
+            continue;
+        if (scriptPubKey[0] != OP_RETURN)
+            continue;
+
+        CScript::const_iterator phash = scriptPubKey.begin() + 1;
+        std::vector<unsigned char> vch;
+        opcodetype opcode;
+        if (!scriptPubKey.GetOp2(phash, opcode, &vch))
+            continue;
+        if (vch.size() != sizeof(uint256))
+            continue;
+
+        uint256 hashCritical = uint256(vch);
+
+        // Update BMM linking data
+        // Add new linking data
+        mapBMMLD.emplace(hashCritical, nHeight);
+        queueBMMLD.push(hashCritical);
+
+        // Remove old linking data if we need to
+        if (mapBMMLD.size() > SIDECHAIN_MAX_LD) {
+            uint256 hashRemove = queueBMMLD.front();
+            std::multimap<uint256, int>::const_iterator it = mapBMMLD.lower_bound(hashRemove);
+            if (it->first == hashRemove) {
+                mapBMMLD.erase(it);
+                queueBMMLD.pop();
+            }
         }
     }
+    hashBlockLastSeen = hashBlock;
     return true;
+}
+
+uint256 SidechainDB::GetHashBlockLastSeen()
+{
+    return hashBlockLastSeen;
+}
+
+std::multimap<uint256, int> SidechainDB::GetLinkingData() const
+{
+    return mapBMMLD;
 }
 
 bool SidechainDB::HasState() const
@@ -406,17 +431,6 @@ bool SidechainDB::HasState() const
         return true;
 
     return false;
-}
-
-int SidechainDB::GetLastTauHeight(const Sidechain& sidechain, int nHeight) const
-{
-    uint16_t nTau = (sidechain.nWaitPeriod + sidechain.nVerificationPeriod);
-    for (;;) {
-        if (nHeight % nTau == 0) break;
-        if (nHeight == 0) break;
-        nHeight--;
-    }
-    return nHeight;
 }
 
 std::vector<SidechainWTJoinState> SidechainDB::GetState(uint8_t nSidechain) const
@@ -451,7 +465,7 @@ std::vector<SidechainWTJoinState> SidechainDB::GetState(uint8_t nSidechain) cons
     return vLastVerification;
 }
 
-bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std::vector<SidechainWTJoinState>>& vScores, bool fJustCheck)
+bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std::vector<SidechainWTJoinState>>& vState, bool fJustCheck)
 {
     if (script.size() < 4)
         return false;
@@ -480,12 +494,12 @@ bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std:
         if (vote != SCOP_REJECT && vote != SCOP_VERIFY && vote != SCOP_IGNORE)
             continue;
 
-        if (nSidechainIndex > vScores.size())
+        if (nSidechainIndex > vState.size())
             return false;
-        if (nWTIndex > vScores[nSidechainIndex].size())
+        if (nWTIndex > vState[nSidechainIndex].size())
             return false;
 
-        const SidechainWTJoinState& old = vScores[nSidechainIndex][nWTIndex];
+        const SidechainWTJoinState& old = vState[nSidechainIndex][nWTIndex];
 
         uint16_t nBlocksLeft = old.nBlocksLeft;
         if (nBlocksLeft > 0)
@@ -504,6 +518,31 @@ bool SidechainDB::ApplyStateScript(const CScript& script, const std::vector<std:
         if (!Update(old.nSidechain, nBlocksLeft, nWorkScore, old.wtxid, fJustCheck) && fJustCheck)
             return false;
     }
+    return true;
+}
+
+bool SidechainDB::ApplyDefaultUpdate()
+{
+    if (!HasState())
+        return true;
+
+    // Collect WT^(s) that need to be updated
+    std::vector<SidechainWTJoinState> vNeedUpdate;
+    for (const Sidechain& s : ValidSidechains) {
+        const std::vector<SidechainWTJoinState> vState = GetState(s.nSidechain);
+        for (const SidechainWTJoinState& state : vState)
+            vNeedUpdate.push_back(state);
+    }
+
+    // Check that the updates can be applied
+    for (const SidechainWTJoinState& v : vNeedUpdate) {
+        if (!Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid, true))
+            return false;
+    }
+    // Apply the updates
+    for (const SidechainWTJoinState& v : vNeedUpdate)
+        Update(v.nSidechain, v.nBlocksLeft - 1, v.nWorkScore, v.wtxid);
+
     return true;
 }
 

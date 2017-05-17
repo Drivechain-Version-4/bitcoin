@@ -1428,7 +1428,12 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, int nHeight)
 bool CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
-    if (!VerifyScript(scriptSig, scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, amount, cacheStore, *txdata), &error)) {
+
+    std::multimap<uint256, int> mapBMMLDCopy;
+    if (scriptPubKey.IsBribe())
+        mapBMMLDCopy = scdb.GetLinkingData();
+
+    if (!VerifyScript(scriptSig, scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, amount, cacheStore, *txdata, mapBMMLDCopy), &error)) {
         return false;
     }
     return true;
@@ -2837,6 +2842,9 @@ bool ReceivedBlockTransactions(const CBlock &block, CValidationState& state, CBl
             mapBlocksUnlinked.insert(std::make_pair(pindexNew->pprev, pindexNew));
         }
     }
+
+    if (!scdb.Update(chainActive.Height(), block.GetHash(), block.vtx[0]))
+        LogPrintf("SCDB failed to updated with block: %s\n", block.GetHash().ToString());
 
     return true;
 }
